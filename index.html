@@ -198,7 +198,9 @@ function render(keepFocus){
   if(!items.length){el.innerHTML=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1></header><p style="padding:24px 16px;color:var(--mu)">El menú aún no está publicado. Vuelve en unos minutos.</p>`;return}
   document.title=((C&&C.biz)||'Menú')+' · Menú digital';
   if(orderId){el.innerHTML=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1></header>`+doneView();return}
-  const cats=((C&&C.cats)||[]).filter(c=>items.some(i=>i.cat===c));
+  const CORD=[/pizza/,/hambur/,/perro/,/salchi/,/picada/,/choripollo/,/gaseosa|bebida/],rk=c=>{const i=CORD.findIndex(r=>r.test(String(c||'').toLowerCase()));return i<0?99:i};
+  let cats=((C&&C.cats)||[]).filter(c=>items.some(i=>i.cat===c));
+  if(!(C&&C.catOrd))cats=cats.map((c,i)=>[c,i]).sort((a,b)=>rk(a[0])-rk(b[0])||a[1]-b[1]).map(x=>x[0]);
   items.forEach(i=>{if(!cats.includes(i.cat))cats.push(i.cat)});
   const tables=(C&&C.tables)||[];
   const head=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1>${C&&C.slogan?`<p>${esc(C.slogan)}</p>`:''}
