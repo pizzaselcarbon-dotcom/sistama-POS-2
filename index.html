@@ -167,7 +167,7 @@ function cartSheet(){
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh">
   <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Tu pedido</h3>
   <div class="sec">${dom?'🛵 Domicilio':'🍽️ '+esc(table||'Sin mesa')}</div>
-  ${cart.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span> <a href="#" onclick="editLine(${i});return false" style="color:var(--g);font-size:13px;font-weight:600;text-decoration:none">✏️ Editar</a></div>
+  ${cart.map((l,i)=>`<div class="ln"><div class="t" onclick="editLine(${i})" style="cursor:pointer"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span> <span style="display:block;color:var(--g);font-size:13px;font-weight:600;margin-top:2px">✏️ Toca para modificar o añadir algo</span></div>
    <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
   <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
