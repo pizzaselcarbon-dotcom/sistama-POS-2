@@ -1,0 +1,28 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Menú público: todos lo leen, solo el dueño (POS con sesión iniciada) lo escribe.
+    match /menu/{doc}       { allow read: if true; allow write: if request.auth != null; }
+    match /menu_items/{doc} { allow read: if true; allow write: if request.auth != null; }
+
+    // Pedidos: el cliente solo puede CREAR y consultar su propio pedido por su id (no listar).
+    match /orders/{id} {
+      allow get: if true;
+      allow list, update, delete: if request.auth != null;
+      allow create: if request.resource.data.keys().hasOnly(
+            ['type','table','name','phone','address','note','pay','fee','lines','total','status','createdAt'])
+        && request.resource.data.status == 'new'
+        && request.resource.data.type in ['mesa','domicilio']
+        && request.resource.data.lines is list
+        && request.resource.data.lines.size() > 0
+        && request.resource.data.lines.size() <= 40
+        && request.resource.data.name is string && request.resource.data.name.size() <= 80
+        && request.resource.data.phone is string && request.resource.data.phone.size() <= 30
+        && request.resource.data.address is string && request.resource.data.address.size() <= 200
+        && request.resource.data.note is string && request.resource.data.note.size() <= 300
+        && request.resource.data.table is string && request.resource.data.table.size() <= 40
+        && request.resource.data.createdAt == request.time;
+    }
+  }
+}
