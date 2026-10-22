@@ -23,6 +23,14 @@ header.top select.f{margin:10px 0 0}
 .chips button{flex:none;padding:8px 14px;border-radius:18px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:14px}
 .chips button.on{background:var(--g);color:#fff;border-color:var(--g)}
 h2.cat{margin:20px 16px 4px;font-size:18px;scroll-margin-top:60px}
+.cats{padding:8px 16px}
+.cb{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 14px;margin:10px 0;border:1px solid var(--ln);border-radius:14px;background:var(--bg);color:var(--tx)}
+.cb .ic{flex:none;width:46px;height:46px;border-radius:12px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:26px}
+.cb .tx{flex:1;min-width:0}.cb .tx b{display:block;font-size:17px}.cb .tx span{color:var(--mu);font-size:13px}
+.cb .go{color:var(--mu);font-size:22px}.cb .bd{background:var(--g);color:#fff;border-radius:12px;padding:2px 9px;font-size:13px;font-weight:700}
+.back{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;background:var(--bg);padding:10px 16px;border-bottom:1px solid var(--ln)}
+.back button{border:0;background:var(--sf);color:var(--tx);border-radius:18px;padding:8px 14px;font-size:14px}
+.back b{font-size:18px}
 .it{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln);align-items:center}
 .it .ph{width:84px;height:84px;border-radius:12px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:38px;flex:none;overflow:hidden}
 .it .ph img{width:100%;height:100%;object-fit:cover}
@@ -96,7 +104,11 @@ function toast(m){const d=document.createElement('div');d.textContent=m;d.style.
 window.setType=t=>{type=t;if(t==='domicilio')table='';render()};
 window.setTable=v=>{table=v;render()};
 window.setZone=v=>{zone=v;LS.set('m_zone',v);render(true)};
-window.goCat=c=>{const e=document.getElementById('c_'+c);if(e)e.scrollIntoView({behavior:'smooth'})};
+let catSel=null,catList=[];
+window.openCat=i=>{catSel=catList[i]||null;window.scrollTo(0,0);render()};
+window.backCats=()=>{catSel=null;window.scrollTo(0,0);render()};
+const ICONS=[[/pizza/,'🍕'],[/hambur/,'🍔'],[/perro|hot ?dog/,'🌭'],[/salchi|picada|choripollo/,'🍟'],[/gaseosa|bebida|refresco/,'🥤'],[/jugo/,'🧃'],[/cerveza/,'🍺'],[/postre|helado/,'🍨'],[/sandwich|sándwich/,'🥪'],[/pollo|asado/,'🍗'],[/desayuno/,'🍳'],[/ensalada/,'🥗'],[/adicional|extra/,'➕']];
+const catIcon=c=>{const k=String(c).toLowerCase(),m=ICONS.find(x=>x[0].test(k));if(m)return m[1];const it=items.find(i=>i.cat===c&&i.emoji);return it?it.emoji:'🍽️'};
 window.tapAdd=id=>{
   const it=items.find(i=>i.id===id);if(!it||outOf(it)||!isOpen())return;
   const g=modGroups(it);
@@ -208,14 +220,18 @@ function render(keepFocus){
    ${type==='mesa'?`<select class="f" onchange="setTable(this.value)" aria-label="Mesa"><option value="">Elige tu mesa…</option>${tables.map(t=>`<option ${t===table?'selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`}
    </header>`;
   const closed=!isOpen()?`<div class="msg">😴 Por ahora no estamos recibiendo pedidos por este medio. ${esc((C&&C.closedMsg)||'')}</div>`:'';
-  const chips=`<nav class="chips">${cats.map(c=>`<button onclick="goCat(${JSON.stringify(c).replace(/"/g,'&quot;')})">${esc(c)}</button>`).join('')}</nav>`;
-  const list=cats.map(c=>`<h2 class="cat" id="c_${esc(c)}">${esc(c)}</h2>`+items.filter(i=>i.cat===c).map(i=>{
+  catList=cats;if(catSel&&!cats.includes(catSel))catSel=null;
+  const itemRow=i=>{
     const out=outOf(i),q=qtyOf(i.id);
     return `<div class="it${out?' out':''}"><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
     <div class="in"><b>${esc(i.name)}</b><div class="pr">${fmt(i.price)}</div>${q?`<div class="sec">En tu pedido: ${q}</div>`:''}</div>
-    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div>`}).join('')).join('');
+    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div>`};
+  const body=catSel
+    ?`<div class="back"><button onclick="backCats()">← Categorías</button><b>${catIcon(catSel)} ${esc(catSel)}</b></div>`+items.filter(i=>i.cat===catSel).map(itemRow).join('')
+    :`<div class="cats">${cats.map((c,k)=>{const n=items.filter(i=>i.cat===c).length,q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);
+      return `<button class="cb" onclick="openCat(${k})"><span class="ic">${catIcon(c)}</span><span class="tx"><b>${esc(c)}</b><span>${n} producto${n===1?'':'s'}</span></span>${q?`<span class="bd">${q}</span>`:''}<span class="go">›</span></button>`}).join('')}</div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
-  el.innerHTML=head+closed+chips+list+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
+  el.innerHTML=head+closed+body+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
