@@ -1,57 +1,56 @@
 <!DOCTYPE html>
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0b0b0b">
+<meta name="theme-color" content="#1D2230">
 <title>Menú digital</title><link rel="icon" href="data:,">
 <style>
-:root{--ink:#0b0b0b;--g:#E10E1B;--bg:#0b0b0b;--tx:#fff;--mu:#a3a3a3;--ln:#2a2a2a;--sf:#1c1c1c;--ok:#1F9D63;--okbg:#173B2B;--wr:#3A2C10;color-scheme:dark}
+:root{--ink:#1D2230;--g:#CC441B;--bg:#fff;--tx:#1B1F27;--mu:#6B7280;--ln:#E4E8EE;--sf:#F1F3F7;--ok:#1F9D63;--okbg:#DDF3E8;--wr:#FFF1D6}
+@media (prefers-color-scheme:dark){:root{--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:96px}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:90px}
 button{font:inherit;cursor:pointer}
-.wrap{max-width:760px;margin:0 auto}
-header.top{padding:16px 16px 6px}
-header.top h1{margin:0;font-size:22px}header.top p{margin:2px 0 0;color:var(--mu);font-size:14px}
+.wrap{max-width:640px;margin:0 auto}
+header.top{background:var(--ink);color:#fff;padding:18px 16px 14px}
+header.top h1{margin:0;font-size:22px}header.top p{margin:2px 0 0;opacity:.75;font-size:14px}
 .seg{display:flex;gap:8px;margin-top:12px}
-.seg button{flex:1;padding:10px;border-radius:12px;border:1px solid #3a3a3a;background:transparent;color:#fff;font-weight:600}
+.seg button{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#fff;font-weight:600}
 .seg button.on{background:var(--g);border-color:var(--g)}
-.pill{display:inline-block;margin-top:10px;background:#1f1f1f;padding:6px 12px;border-radius:16px;font-size:14px}
-select.f,input.f,textarea.f{width:100%;padding:12px;border:1px solid var(--ln);border-radius:10px;background:var(--sf);color:var(--tx);font:inherit;margin:4px 0 10px}
+.pill{display:inline-block;margin-top:12px;background:rgba(255,255,255,.14);padding:6px 12px;border-radius:16px;font-size:14px}
+select.f,input.f,textarea.f{width:100%;padding:12px;border:1px solid var(--ln);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0 10px}
 header.top select.f{margin:10px 0 0}
-.lay{display:flex;gap:10px;padding:12px;align-items:flex-start}
-.side{flex:none;width:96px;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
-.side::-webkit-scrollbar{display:none}
-.tile{position:relative;display:block;width:100%;padding:0;border:2px solid #1f1f1f;border-radius:16px;background:#141414;overflow:hidden;color:#cfcfcf}
-.tile .ic{display:flex;align-items:center;justify-content:center;height:62px;font-size:32px;background:radial-gradient(circle at 50% 65%,#6a3411 0%,#2b1409 60%,#150a05 100%)}
-.tile.cold .ic{background:radial-gradient(circle at 50% 65%,#15508a 0%,#0c2a4a 60%,#08121f 100%)}
-.tile .lb{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px 2px;font-size:11.5px;letter-spacing:-.2px;font-weight:700;text-align:center;line-height:1.15;background:#1a1a1a;overflow-wrap:anywhere}
-.tile.on{border-color:var(--g)}.tile.on .lb{color:#ff3b45}
-.tile .bd{position:absolute;top:4px;right:4px;background:var(--g);color:#fff;border-radius:11px;min-width:22px;padding:1px 6px;font-size:12px;font-weight:700}
-.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
-.card{display:flex;gap:12px;padding:12px;background:#fff;color:#111;border-radius:20px}
-.card.out{opacity:.55}
-.card .ph{flex:none;width:92px;height:92px;border-radius:12px;background:#eee;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
-.card .ph img{width:100%;height:100%;object-fit:cover}
-.card .in{flex:1;min-width:0;display:flex;flex-direction:column}
-.card h3{margin:0;font-size:17px;line-height:1.2}
-.card .ds{margin:3px 0 0;color:#555;font-size:13px;line-height:1.3}
-.card .row{margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;padding-top:8px}
-.card .pr{font-size:20px;font-weight:800}.card .qt{display:block;color:var(--g);font-size:12px;font-weight:700}
-.add{flex:none;width:44px;height:44px;border-radius:12px;border:0;background:var(--g);color:#fff;font-size:28px;line-height:1}
-.add:disabled{background:#ddd;color:#777;width:auto;padding:0 12px;font-size:13px}
-.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:#0b0b0bee;border-top:1px solid var(--ln);z-index:10}
-.bar button,.big{width:100%;max-width:728px;display:flex;justify-content:space-between;margin:0 auto;padding:15px 18px;border:0;border-radius:14px;background:var(--g);color:#fff;font-weight:700;font-size:16px}
+.chips{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:8px;overflow-x:auto;padding:10px 16px;border-bottom:1px solid var(--ln);scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chips button{flex:none;padding:8px 14px;border-radius:18px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:14px}
+.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}
+h2.cat{margin:20px 16px 4px;font-size:18px;scroll-margin-top:60px}
+.cats{padding:8px 16px}
+.cb{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 14px;margin:10px 0;border:1px solid var(--ln);border-radius:14px;background:var(--bg);color:var(--tx)}
+.cb .ic{flex:none;width:46px;height:46px;border-radius:12px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:26px}
+.cb .tx{flex:1;min-width:0}.cb .tx b{display:block;font-size:17px}.cb .tx span{color:var(--mu);font-size:13px}
+.cb .go{color:var(--mu);font-size:22px}.cb .bd{background:var(--g);color:#fff;border-radius:12px;padding:2px 9px;font-size:13px;font-weight:700}
+.back{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:10px;background:var(--bg);padding:10px 16px;border-bottom:1px solid var(--ln)}
+.back button{border:0;background:var(--sf);color:var(--tx);border-radius:18px;padding:8px 14px;font-size:14px}
+.back b{font-size:18px}
+.it{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln);align-items:center}
+.it .ph{width:84px;height:84px;border-radius:12px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:38px;flex:none;overflow:hidden}
+.it .ph img{width:100%;height:100%;object-fit:cover}
+.it .in{flex:1;min-width:0}.it b{display:block}.it .pr{color:var(--g);font-weight:700;margin-top:2px}
+.it.out{opacity:.5}
+.add{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--g);color:#fff;font-size:24px;line-height:1}
+.add:disabled{background:var(--ln);color:var(--mu);width:auto;border-radius:16px;padding:0 10px;font-size:12px}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--ln);z-index:10}
+.bar button,.big{width:100%;max-width:608px;display:flex;justify-content:space-between;margin:0 auto;padding:15px 18px;border:0;border-radius:12px;background:var(--g);color:#fff;font-weight:700;font-size:16px}
 .big{justify-content:center}.big:disabled{opacity:.5}
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:20;display:flex;align-items:flex-end;justify-content:center}
-.sh{background:#181818;width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));border-radius:18px 18px 0 0}
+.ov{position:fixed;inset:0;background:rgba(10,12,18,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
+.sh{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));border-radius:18px 18px 0 0}
 .sh h3{margin:0 0 4px}.lbl{font-size:13px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 4px}
 .mch{display:inline-flex;flex-direction:column;align-items:flex-start;margin:0 8px 8px 0;padding:9px 13px;border-radius:12px;border:1px solid var(--ln);background:var(--sf);color:var(--tx)}
 .mch small{color:var(--mu)}.mch.on{border-color:var(--g);background:var(--g);color:#fff}.mch.on small{color:#fff}.mch:disabled{opacity:.4}
 .ln{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}
-.ln .t{flex:1;min-width:0}.ln em{display:block;font-style:normal;color:var(--mu);font-size:13px}.ln .t .sec{display:block}
+.ln .t{flex:1;min-width:0}.ln .t .sec{display:block}.ln em{display:block;font-style:normal;color:var(--mu);font-size:13px}
 .qty{display:flex;align-items:center;gap:10px}.qty button{width:32px;height:32px;border-radius:50%;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:18px}
 .tot{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin:12px 0}
 .msg{padding:12px 14px;border-radius:10px;background:var(--wr);margin:12px 16px;font-size:14px}
-.sh .msg{margin:12px 0}
 .x{float:right;border:0;background:none;color:var(--mu);font-size:22px}
 .done{text-align:center;padding:40px 20px}.done .e{font-size:64px}
 .steps{display:flex;justify-content:center;gap:6px;margin:18px 0;flex-wrap:wrap}
@@ -107,10 +106,8 @@ window.setTable=v=>{table=v;render()};
 window.setZone=v=>{zone=v;LS.set('m_zone',v);render(true)};
 let catSel=null,catList=[];
 window.openCat=i=>{catSel=catList[i]||null;window.scrollTo(0,0);render()};
-const ICONS=[[/pizza/,'🍕'],[/hambur/,'🍔'],[/perro|hot ?dog/,'🌭'],[/salchi/,'🍟'],[/picada|choripollo/,'🍽️'],[/gaseosa|bebida|refresco/,'🥤'],[/jugo/,'🧃'],[/cerveza/,'🍺'],[/postre|helado/,'🍨'],[/sandwich|sándwich/,'🥪'],[/pollo|asado/,'🍗'],[/desayuno/,'🍳'],[/ensalada/,'🥗'],[/adicional|extra/,'➕']];
-const ALIAS=[[/^perros? calientes?$/i,'Perros'],[/^gaseosas?$/i,'Bebidas']];
-const catName=c=>{const m=ALIAS.find(x=>x[0].test(String(c).trim()));return m?m[1]:c};
-const isCold=c=>/gaseosa|bebida|jugo|refresco|cerveza|helado/i.test(String(c));
+window.backCats=()=>{catSel=null;window.scrollTo(0,0);render()};
+const ICONS=[[/pizza/,'🍕'],[/hambur/,'🍔'],[/perro|hot ?dog/,'🌭'],[/salchi/,'🍟'],[/picada/,'🍢'],[/choripollo/,'🥗'],[/gaseosa|bebida|refresco/,'🥤'],[/jugo/,'🧃'],[/cerveza/,'🍺'],[/postre|helado/,'🍨'],[/sandwich|sándwich/,'🥪'],[/pollo|asado/,'🍗'],[/desayuno/,'🍳'],[/ensalada/,'🥗'],[/adicional|extra/,'➕']];
 const catIcon=c=>{const k=String(c).toLowerCase(),m=ICONS.find(x=>x[0].test(k));if(m)return m[1];const it=items.find(i=>i.cat===c&&i.emoji);return it?it.emoji:'🍽️'};
 window.tapAdd=id=>{
   const it=items.find(i=>i.id===id);if(!it||outOf(it)||!isOpen())return;
@@ -223,16 +220,16 @@ function render(keepFocus){
    ${type==='mesa'?`<select class="f" onchange="setTable(this.value)" aria-label="Mesa"><option value="">Elige tu mesa…</option>${tables.map(t=>`<option ${t===table?'selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`}
    </header>`;
   const closed=!isOpen()?`<div class="msg">😴 Por ahora no estamos recibiendo pedidos por este medio. ${esc((C&&C.closedMsg)||'')}</div>`:'';
-  catList=cats;if(!catSel||!cats.includes(catSel))catSel=cats[0]||null;
+  catList=cats;if(catSel&&!cats.includes(catSel))catSel=null;
   const itemRow=i=>{
     const out=outOf(i),q=qtyOf(i.id);
-    return `<div class="card${out?' out':''}"><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
-    <div class="in"><h3>${esc(i.name)}</h3>${i.desc?`<p class="ds">${esc(i.desc)}</p>`:''}
-    <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en tu pedido</span>`:''}</div>
-    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
-  const side=`<nav class="side" aria-label="Categorías">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);
-    return `<button class="tile${c===catSel?' on':''}${isCold(c)?' cold':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
-  const body=`<div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(itemRow).join('')}</main></div>`;
+    return `<div class="it${out?' out':''}"><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
+    <div class="in"><b>${esc(i.name)}</b><div class="pr">${fmt(i.price)}</div>${q?`<div class="sec">En tu pedido: ${q}</div>`:''}</div>
+    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div>`};
+  const body=catSel
+    ?`<div class="back"><button onclick="backCats()">← Categorías</button><b>${catIcon(catSel)} ${esc(catSel)}</b></div>`+items.filter(i=>i.cat===catSel).map(itemRow).join('')
+    :`<div class="cats">${cats.map((c,k)=>{const n=items.filter(i=>i.cat===c).length,q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);
+      return `<button class="cb" onclick="openCat(${k})"><span class="ic">${catIcon(c)}</span><span class="tx"><b>${esc(c)}</b><span>${n} producto${n===1?'':'s'}</span></span>${q?`<span class="bd">${q}</span>`:''}<span class="go">›</span></button>`}).join('')}</div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
   el.innerHTML=head+closed+body+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
