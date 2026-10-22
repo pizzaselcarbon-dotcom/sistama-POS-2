@@ -74,7 +74,16 @@ let cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null,
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:''};
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},e=>{loaded.c=true;err='No se pudo cargar el menú.';render()});
-onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},e=>{loaded.i=true;err='No se pudo cargar el menú.';render()});
+// Orden fijo de productos dentro de cada categoría (por nombre)
+const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+const RANK=[
+  [/pizza/,n=>/hawai/.test(n)?0:/mexican/.test(n)?4:/maiz/.test(n)?3:/especial/.test(n)?2:/pollo/.test(n)?1:9],
+  [/hamburgues/,n=>/sencill/.test(n)?0:/mixt/.test(n)?1:/doble/.test(n)?2:/sandwich/.test(n)?3:9],
+  [/salchipap/,n=>/porcion|^papas?( |$)/.test(n)?99:0]
+];
+function reorder(arr){RANK.forEach(([cr,fn])=>{const idx=[];arr.forEach((it,i)=>{if(cr.test(norm(it.cat)))idx.push(i)});
+  const sorted=idx.map((i,k)=>[arr[i],k]).sort((a,b)=>fn(norm(a[0].name))-fn(norm(b[0].name))||a[1]-b[1]).map(x=>x[0]);idx.forEach((i,k)=>{arr[i]=sorted[k]})});return arr}
+onSnapshot(collection(db,'menu_items'),s=>{items=reorder(s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0)));loaded.i=true;render()},e=>{loaded.i=true;err='No se pudo cargar el menú.';render()});
 
 const modGroups=it=>(it.mods||[]).map(id=>mods.find(m=>String(m.id)===String(id))).filter(Boolean);
 const outOf=it=>it.stock!=null&&it.stock<=0;
