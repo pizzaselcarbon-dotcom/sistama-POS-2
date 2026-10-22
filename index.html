@@ -218,7 +218,7 @@ function render(keepFocus){
   items.forEach(i=>{if(!cats.includes(i.cat))cats.push(i.cat)});
   const tables=(C&&C.tables)||[];
   const head=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1>${C&&C.slogan?`<p>${esc(C.slogan)}</p>`:''}
-   ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🍽️ Estoy en el local</button></div>
+   ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🛍️ Paso a recoger</button></div>
    ${type==='mesa'?`<select class="f" onchange="setTable(this.value)" aria-label="Mesa"><option value="">Elige tu mesa…</option>${tables.map(t=>`<option ${t===table?'selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`}
    </header>`;
   const closed=!isOpen()?`<div class="msg">😴 Por ahora no estamos recibiendo pedidos por este medio. ${esc((C&&C.closedMsg)||'')}</div>`:'';
