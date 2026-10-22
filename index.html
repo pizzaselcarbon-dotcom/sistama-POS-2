@@ -107,9 +107,14 @@ window.pickTxt=v=>{pick.txt=v};
 window.pickOk=()=>{
   const opts=[];pick.g.forEach(m=>m.opts.forEach((o,j)=>{if(pick.sel[m.id+'_'+j])opts.push(o)}));
   if(pick.txt.trim())opts.push({n:pick.txt.trim().slice(0,80),p:0});
+  if(pick.idx!=null){const it=pick.it,idx=pick.idx,old=cart[idx],key=it.id+'|'+opts.map(o=>o.n).join(','),price=it.price+opts.reduce((a,o)=>a+(+o.p||0),0),same=cart.find((c,k)=>k!==idx&&c.key===key);
+    cart.splice(idx,1);if(same)same.qty+=old.qty;else cart.splice(idx,0,{...old,key,mods:opts.map(o=>o.n),price});pick=null;cartOpen=true;render();return}
   addLine(pick.it,opts);pick=null;render();
 };
-window.closePick=()=>{pick=null;render()};
+window.closePick=()=>{if(pick&&pick.idx!=null)cartOpen=true;pick=null;render()};
+window.editLine=i=>{const l=cart[i],it=items.find(x=>x.id===l.id);if(!it)return;const g=modGroups(it),sel={},rest=l.mods.slice();
+  g.forEach(m=>m.opts.forEach((o,j)=>{const x=rest.indexOf(o.n);if(x>=0){sel[m.id+'_'+j]=true;rest.splice(x,1)}}));
+  pick={it,g,sel,txt:rest.join(' '),idx:i};cartOpen=false;render()};
 window.openCart=()=>{cartOpen=true;err='';render()};
 window.closeCart=()=>{cartOpen=false;render()};
 window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);
@@ -153,7 +158,7 @@ function pickSheet(){
   ${p.g.map(m=>`<div class="lbl">${esc(m.name)}</div>${m.opts.map((o,j)=>{const k=m.id+'_'+j,off=o.s!=null&&o.s<=0;
     return `<button class="mch${p.sel[k]?' on':''}" ${off?'disabled':''} onclick="pickTog('${k}')">${esc(o.n)}${o.p?`<small>+${fmt(o.p)}</small>`:''}${off?'<small>Agotado</small>':''}</button>`}).join('')}`).join('')}
   <div class="lbl">Comentario</div><input class="f" id="ptx" maxlength="80" placeholder="Ej: sin cebolla, bien cocida" value="${esc(p.txt)}" oninput="pickTxt(this.value)">
-  <button class="big" onclick="pickOk()">Agregar ${fmt(price)}</button></div></div>`;
+  <button class="big" onclick="pickOk()">${p.idx!=null?'Guardar cambios':'Agregar'} ${fmt(price)}</button></div></div>`;
 }
 
 function cartSheet(){
@@ -162,7 +167,7 @@ function cartSheet(){
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh">
   <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Tu pedido</h3>
   <div class="sec">${dom?'🛵 Domicilio':'🍽️ '+esc(table||'Sin mesa')}</div>
-  ${cart.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span></div>
+  ${cart.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span> <a href="#" onclick="editLine(${i});return false" style="color:var(--g);font-size:13px;font-weight:600;text-decoration:none">✏️ Editar</a></div>
    <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
   <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
