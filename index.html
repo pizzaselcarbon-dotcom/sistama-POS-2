@@ -69,7 +69,7 @@ const db=getFirestore(initializeApp(FIREBASE_CONFIG));
 const P=new URLSearchParams(location.search);
 const mesaQR=(P.get('mesa')||'').slice(0,40);
 let C=null, items=[], mods=[], loaded={c:false,i:false};
-let type=mesaQR?'mesa':'domicilio', table=mesaQR;
+let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'';
 let cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:''};
 
@@ -80,7 +80,8 @@ const modGroups=it=>(it.mods||[]).map(id=>mods.find(m=>String(m.id)===String(id)
 const outOf=it=>it.stock!=null&&it.stock<=0;
 const qtyOf=id=>cart.filter(l=>l.id===id).reduce((s,l)=>s+l.qty,0);
 const sub=()=>cart.reduce((s,l)=>s+l.price*l.qty,0);
-const fee=()=>type==='domicilio'?(+(C&&C.deliveryFee)||0):0;
+const zones=()=>(C&&C.zones)||[];
+const fee=()=>{if(type!=='domicilio')return 0;if(zones().length){const z=zones().find(x=>x.n===zone);return z?(+z.p||0):0}return +(C&&C.deliveryFee)||0};
 const count=()=>cart.reduce((s,l)=>s+l.qty,0);
 
 function addLine(it,opts){
@@ -94,6 +95,7 @@ function toast(m){const d=document.createElement('div');d.textContent=m;d.style.
 
 window.setType=t=>{type=t;if(t==='domicilio')table='';render()};
 window.setTable=v=>{table=v;render()};
+window.setZone=v=>{zone=v;LS.set('m_zone',v);render(true)};
 window.goCat=c=>{const e=document.getElementById('c_'+c);if(e)e.scrollIntoView({behavior:'smooth'})};
 window.tapAdd=id=>{
   const it=items.find(i=>i.id===id);if(!it||outOf(it)||!isOpen())return;
@@ -124,6 +126,7 @@ window.send=async()=>{
   if(!cart.length){err='Agrega productos a tu pedido.';return render(true)}
   if(type==='mesa'&&!table){err='Elige tu mesa.';return render(true)}
   if(type==='domicilio'){
+    if(zones().length&&!zones().some(x=>x.n===zone)){err='Elige a qué zona va tu domicilio.';return render(true)}
     if(!name||!phone||!address){err='Para domicilio necesitamos tu nombre, teléfono y dirección.';return render(true)}
     if(phone.replace(/\D/g,'').length<7){err='Revisa tu número de teléfono.';return render(true)}
   }
@@ -131,7 +134,7 @@ window.send=async()=>{
   const total=sub()+fee();
   try{
     const ref=await addDoc(collection(db,'orders'),{
-      type,table:type==='mesa'?table:'',name:name.slice(0,80),phone:phone.slice(0,30),address:address.slice(0,200),
+      type,table:(type==='mesa'?table:(type==='domicilio'?zone:'')).slice(0,40),name:name.slice(0,80),phone:phone.slice(0,30),address:address.slice(0,200),
       note:form.note.trim().slice(0,300),pay:(type==='domicilio'?form.pay||(C&&C.pays&&C.pays[0])||'':'').slice(0,40),fee:fee(),
       lines:cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''})),
       total,status:'new',createdAt:serverTimestamp()
@@ -163,12 +166,13 @@ function cartSheet(){
    <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
   <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
+  ${dom&&zones().length?`<div class="lbl">¿A dónde enviamos?</div><select class="f" onchange="setZone(this.value)" aria-label="Zona de entrega"><option value="">Elige la zona…</option>${zones().map(z=>`<option value="${esc(z.n)}" ${z.n===zone?'selected':''}>${esc(z.n)} · ${fmt(z.p)}</option>`).join('')}</select>`:''}
   ${dom?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono / WhatsApp" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">
   <input class="f" placeholder="Dirección (barrio, calle, referencias)" maxlength="200" value="${esc(form.address)}" oninput="fld('address',this.value)">
   ${pays.length?`<div class="lbl">Forma de pago</div><select class="f" onchange="fld('pay',this.value)">${pays.map(p=>`<option ${p===form.pay?'selected':''}>${esc(p)}</option>`).join('')}</select>`:''}`:''}
   <div class="lbl">Notas del pedido</div><textarea class="f" rows="2" maxlength="300" placeholder="Algo más que debamos saber" oninput="fld('note',this.value)">${esc(form.note)}</textarea>
   <div class="sec" style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(sub())}</span></div>
-  ${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio</span><span>${fmt(fee())}</span></div>`:''}
+  ${dom&&zones().length&&!zone?`<div class="sec">Elige la zona para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
   <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button></div></div>`;
