@@ -4,12 +4,12 @@
 <meta name="theme-color" content="#1D2230">
 <title>Menú digital</title><link rel="icon" href="data:,">
 <style>
-:root{--ink:#1D2230;--g:#CC441B;--bg:#fff;--tx:#1B1F27;--mu:#6B7280;--ln:#E4E8EE;--sf:#F1F3F7;--ok:#1F9D63;--okbg:#DDF3E8;--wr:#FFF1D6}
+:root{--ink:#1D2230;--g:#CC441B;--bg:#fff;--tx:#1B1F27;--mu:#6B7280;--ln:#E4E8EE;--sf:#F1F3F7;--ok:#1F9D63;--okbg:#DDF3E8;--wr:#FFF1D6;color-scheme:light dark}
 @media (prefers-color-scheme:dark){:root{--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
-body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:90px}
+body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:96px}
 button{font:inherit;cursor:pointer}
-.wrap{max-width:640px;margin:0 auto}
+.wrap{max-width:760px;margin:0 auto}
 header.top{background:var(--ink);color:#fff;padding:18px 16px 14px}
 header.top h1{margin:0;font-size:22px}header.top p{margin:2px 0 0;opacity:.75;font-size:14px}
 .seg{display:flex;gap:8px;margin-top:12px}
@@ -18,20 +18,28 @@ header.top h1{margin:0;font-size:22px}header.top p{margin:2px 0 0;opacity:.75;fo
 .pill{display:inline-block;margin-top:12px;background:rgba(255,255,255,.14);padding:6px 12px;border-radius:16px;font-size:14px}
 select.f,input.f,textarea.f{width:100%;padding:12px;border:1px solid var(--ln);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0 10px}
 header.top select.f{margin:10px 0 0}
-.chips{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:8px;overflow-x:auto;padding:10px 16px;border-bottom:1px solid var(--ln);scrollbar-width:none}
-.chips::-webkit-scrollbar{display:none}
-.chips button{flex:none;padding:8px 14px;border-radius:18px;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:14px}
-.chips button.on{background:var(--g);color:#fff;border-color:var(--g)}
-h2.cat{margin:20px 16px 4px;font-size:18px;scroll-margin-top:60px}
-.it{display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--ln);align-items:center}
-.it .ph{width:84px;height:84px;border-radius:12px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:38px;flex:none;overflow:hidden}
-.it .ph img{width:100%;height:100%;object-fit:cover}
-.it .in{flex:1;min-width:0}.it b{display:block}.it .pr{color:var(--g);font-weight:700;margin-top:2px}
-.it.out{opacity:.5}
-.add{flex:none;width:40px;height:40px;border-radius:50%;border:0;background:var(--g);color:#fff;font-size:24px;line-height:1}
-.add:disabled{background:var(--ln);color:var(--mu);width:auto;border-radius:16px;padding:0 10px;font-size:12px}
+.lay{display:flex;gap:10px;padding:12px;align-items:flex-start}
+.side{flex:none;width:96px;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
+.side::-webkit-scrollbar{display:none}
+.tile{position:relative;display:block;width:100%;padding:0;border:2px solid var(--ln);border-radius:16px;background:var(--sf);overflow:hidden;color:var(--tx)}
+.tile .ic{display:flex;align-items:center;justify-content:center;height:62px;font-size:32px;background:var(--sf)}
+.tile .lb{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px 2px;font-size:11.5px;letter-spacing:-.2px;font-weight:700;text-align:center;line-height:1.15;background:var(--bg);overflow-wrap:anywhere}
+.tile.on{border-color:var(--g)}.tile.on .lb{color:var(--g)}
+.tile .bd{position:absolute;top:4px;right:4px;background:var(--g);color:#fff;border-radius:11px;min-width:22px;padding:1px 6px;font-size:12px;font-weight:700}
+.main{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
+.card{display:flex;gap:12px;padding:12px;background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:20px}
+.card.out{opacity:.55}
+.card .ph{flex:none;width:92px;height:92px;border-radius:12px;background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden}
+.card .ph img{width:100%;height:100%;object-fit:cover}
+.card .in{flex:1;min-width:0;display:flex;flex-direction:column}
+.card h3{margin:0;font-size:17px;line-height:1.2}
+.card .ds{margin:3px 0 0;color:var(--mu);font-size:13px;line-height:1.3}
+.card .row{margin-top:auto;display:flex;align-items:flex-end;justify-content:space-between;gap:8px;padding-top:8px}
+.card .pr{font-size:20px;font-weight:800;color:var(--g)}.card .qt{display:block;color:var(--mu);font-size:12px;font-weight:600}
+.add{flex:none;width:44px;height:44px;border-radius:50%;border:0;background:var(--g);color:#fff;font-size:26px;line-height:1}
+.add:disabled{background:var(--ln);color:var(--mu);width:auto;border-radius:16px;padding:0 12px;font-size:13px}
 .bar{position:fixed;left:0;right:0;bottom:0;padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--bg);border-top:1px solid var(--ln);z-index:10}
-.bar button,.big{width:100%;max-width:608px;display:flex;justify-content:space-between;margin:0 auto;padding:15px 18px;border:0;border-radius:12px;background:var(--g);color:#fff;font-weight:700;font-size:16px}
+.bar button,.big{width:100%;max-width:728px;display:flex;justify-content:space-between;margin:0 auto;padding:15px 18px;border:0;border-radius:12px;background:var(--g);color:#fff;font-weight:700;font-size:16px}
 .big{justify-content:center}.big:disabled{opacity:.5}
 .ov{position:fixed;inset:0;background:rgba(10,12,18,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .sh{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));border-radius:18px 18px 0 0}
@@ -39,10 +47,11 @@ h2.cat{margin:20px 16px 4px;font-size:18px;scroll-margin-top:60px}
 .mch{display:inline-flex;flex-direction:column;align-items:flex-start;margin:0 8px 8px 0;padding:9px 13px;border-radius:12px;border:1px solid var(--ln);background:var(--sf);color:var(--tx)}
 .mch small{color:var(--mu)}.mch.on{border-color:var(--g);background:var(--g);color:#fff}.mch.on small{color:#fff}.mch:disabled{opacity:.4}
 .ln{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}
-.ln .t{flex:1;min-width:0}.ln .t .sec{display:block}.ln em{display:block;font-style:normal;color:var(--mu);font-size:13px}
+.ln .t{flex:1;min-width:0}.ln em{display:block;font-style:normal;color:var(--mu);font-size:13px}.ln .t .sec{display:block}
 .qty{display:flex;align-items:center;gap:10px}.qty button{width:32px;height:32px;border-radius:50%;border:1px solid var(--ln);background:var(--sf);color:var(--tx);font-size:18px}
 .tot{display:flex;justify-content:space-between;font-size:18px;font-weight:700;margin:12px 0}
 .msg{padding:12px 14px;border-radius:10px;background:var(--wr);margin:12px 16px;font-size:14px}
+.sh .msg{margin:12px 0}
 .x{float:right;border:0;background:none;color:var(--mu);font-size:22px}
 .done{text-align:center;padding:40px 20px}.done .e{font-size:64px}
 .steps{display:flex;justify-content:center;gap:6px;margin:18px 0;flex-wrap:wrap}
@@ -74,16 +83,7 @@ let cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null,
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:''};
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},e=>{loaded.c=true;err='No se pudo cargar el menú.';render()});
-// Orden fijo de productos dentro de cada categoría (por nombre)
-const norm=t=>String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-const RANK=[
-  [/pizza/,n=>/hawai/.test(n)?0:/mexican/.test(n)?4:/maiz/.test(n)?3:/especial/.test(n)?2:/pollo/.test(n)?1:9],
-  [/hamburgues/,n=>/sencill/.test(n)?0:/mixt/.test(n)?1:/doble/.test(n)?2:/sandwich/.test(n)?3:9],
-  [/salchipap/,n=>/porcion|^papas?( |$)/.test(n)?99:0]
-];
-function reorder(arr){RANK.forEach(([cr,fn])=>{const idx=[];arr.forEach((it,i)=>{if(cr.test(norm(it.cat)))idx.push(i)});
-  const sorted=idx.map((i,k)=>[arr[i],k]).sort((a,b)=>fn(norm(a[0].name))-fn(norm(b[0].name))||a[1]-b[1]).map(x=>x[0]);idx.forEach((i,k)=>{arr[i]=sorted[k]})});return arr}
-onSnapshot(collection(db,'menu_items'),s=>{items=reorder(s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0)));loaded.i=true;render()},e=>{loaded.i=true;err='No se pudo cargar el menú.';render()});
+onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},e=>{loaded.i=true;err='No se pudo cargar el menú.';render()});
 
 const modGroups=it=>(it.mods||[]).map(id=>mods.find(m=>String(m.id)===String(id))).filter(Boolean);
 const outOf=it=>it.stock!=null&&it.stock<=0;
@@ -105,7 +105,12 @@ function toast(m){const d=document.createElement('div');d.textContent=m;d.style.
 window.setType=t=>{type=t;if(t==='domicilio')table='';render()};
 window.setTable=v=>{table=v;render()};
 window.setZone=v=>{zone=v;LS.set('m_zone',v);render(true)};
-window.goCat=c=>{const e=document.getElementById('c_'+c);if(e)e.scrollIntoView({behavior:'smooth'})};
+let catSel=null,catList=[];
+window.openCat=i=>{catSel=catList[i]||null;window.scrollTo(0,0);render()};
+const ICONS=[[/pizza/,'🍕'],[/hambur/,'🍔'],[/perro|hot ?dog/,'🌭'],[/salchi/,'🍟'],[/picada|choripollo/,'🍽️'],[/gaseosa|bebida|refresco/,'🥤'],[/jugo/,'🧃'],[/cerveza/,'🍺'],[/postre|helado/,'🍨'],[/sandwich|sándwich/,'🥪'],[/pollo|asado/,'🍗'],[/desayuno/,'🍳'],[/ensalada/,'🥗'],[/adicional|extra/,'➕']];
+const ALIAS=[[/^perros? calientes?$/i,'Perros'],[/^gaseosas?$/i,'Bebidas']];
+const catName=c=>{const m=ALIAS.find(x=>x[0].test(String(c).trim()));return m?m[1]:c};
+const catIcon=c=>{const k=String(c).toLowerCase(),m=ICONS.find(x=>x[0].test(k));if(m)return m[1];const it=items.find(i=>i.cat===c&&i.emoji);return it?it.emoji:'🍽️'};
 window.tapAdd=id=>{
   const it=items.find(i=>i.id===id);if(!it||outOf(it)||!isOpen())return;
   const g=modGroups(it);
@@ -116,24 +121,29 @@ window.pickTxt=v=>{pick.txt=v};
 window.pickOk=()=>{
   const opts=[];pick.g.forEach(m=>m.opts.forEach((o,j)=>{if(pick.sel[m.id+'_'+j])opts.push(o)}));
   if(pick.txt.trim())opts.push({n:pick.txt.trim().slice(0,80),p:0});
-  if(pick.idx!=null){const it=pick.it,idx=pick.idx,old=cart[idx],key=it.id+'|'+opts.map(o=>o.n).join(','),price=it.price+opts.reduce((a,o)=>a+(+o.p||0),0),same=cart.find((c,k)=>k!==idx&&c.key===key);
-    cart.splice(idx,1);if(same)same.qty+=old.qty;else cart.splice(idx,0,{...old,key,mods:opts.map(o=>o.n),price});pick=null;cartOpen=true;render();return}
   addLine(pick.it,opts);pick=null;render();
 };
-window.closePick=()=>{if(pick&&pick.idx!=null)cartOpen=true;pick=null;render()};
-window.editLine=i=>{const l=cart[i],it=items.find(x=>x.id===l.id);if(!it)return;const g=modGroups(it),sel={},rest=l.mods.slice();
-  g.forEach(m=>m.opts.forEach((o,j)=>{const x=rest.indexOf(o.n);if(x>=0){sel[m.id+'_'+j]=true;rest.splice(x,1)}}));
-  pick={it,g,sel,txt:rest.join(' '),idx:i};cartOpen=false;render()};
+window.closePick=()=>{pick=null;render()};
 window.openCart=()=>{cartOpen=true;err='';render()};
 window.closeCart=()=>{cartOpen=false;render()};
 window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);
   if(d>0&&it&&it.stock!=null&&qtyOf(l.id)>=it.stock){toast('Solo quedan '+it.stock);return}
   l.qty+=d;if(l.qty<=0)cart.splice(i,1);if(!cart.length)cartOpen=false;render(true)};
 window.fld=(k,v)=>{form[k]=v};
-window.reset=()=>{if(unsub){unsub();unsub=null}cart=[];orderId=null;orderSt='new';form.note='';cartOpen=false;render()};
+window.reset=()=>{lastWa='';if(unsub){unsub();unsub=null}cart=[];orderId=null;orderSt='new';form.note='';cartOpen=false;render()};
 
 const isOpen=()=>!C||C.open!==false;
 
+let lastWa='';
+function waUrl(num,id,name,phone,address){
+  const L=[];L.push('*Nuevo pedido a domicilio* #'+id.slice(-4).toUpperCase());
+  L.push('Cliente: '+name);L.push('Teléfono: '+phone);if(zone)L.push('Zona: '+zone);L.push('Dirección: '+address);
+  const pay=form.pay||(C&&C.pays&&C.pays[0])||'';if(pay)L.push('Pago: '+pay);
+  L.push('');cart.forEach(l=>L.push(l.qty+'x '+l.name+(l.mods.length?' ('+l.mods.join(', ')+')':'')+' - '+fmt(l.price*l.qty)));
+  L.push('');L.push('Subtotal: '+fmt(sub()));if(fee())L.push('Domicilio'+(zone?' ('+zone+')':'')+': '+fmt(fee()));
+  L.push('*Total: '+fmt(sub()+fee())+'*');if(form.note.trim())L.push('Notas: '+form.note.trim());
+  return 'https://wa.me/'+num+'?text='+encodeURIComponent(L.join('\n'));
+}
 window.send=async()=>{
   if(sending)return;err='';
   const name=form.name.trim(),phone=form.phone.trim(),address=form.address.trim();
@@ -144,6 +154,7 @@ window.send=async()=>{
     if(!name||!phone||!address){err='Para domicilio necesitamos tu nombre, teléfono y dirección.';return render(true)}
     if(phone.replace(/\D/g,'').length<7){err='Revisa tu número de teléfono.';return render(true)}
   }
+  const waNum=((C&&C.wa)||'').replace(/\D/g,'');let wa=null;if(type==='domicilio'&&waNum){try{wa=window.open('','_blank')}catch(e){wa=null}}
   sending=true;render(true);
   const total=sub()+fee();
   try{
@@ -155,9 +166,11 @@ window.send=async()=>{
     });
     LS.set('m_name',name);LS.set('m_phone',phone);LS.set('m_addr',address);
     orderId=ref.id;orderSt='new';cartOpen=false;sending=false;
+    lastWa=(type==='domicilio'&&waNum)?waUrl(waNum,ref.id,name,phone,address):'';
+    if(wa){try{lastWa?(wa.location.href=lastWa):wa.close()}catch(e){}}
     unsub=onSnapshot(doc(db,'orders',orderId),s=>{if(s.exists()){orderSt=s.data().status;render()}},()=>{});
     render();
-  }catch(e){sending=false;err='No se pudo enviar el pedido. Revisa tu conexión e intenta de nuevo.';render(true)}
+  }catch(e){if(wa){try{wa.close()}catch(x){}}sending=false;err='No se pudo enviar el pedido. Revisa tu conexión e intenta de nuevo.';render(true)}
 };
 
 function pickSheet(){
@@ -167,7 +180,7 @@ function pickSheet(){
   ${p.g.map(m=>`<div class="lbl">${esc(m.name)}</div>${m.opts.map((o,j)=>{const k=m.id+'_'+j,off=o.s!=null&&o.s<=0;
     return `<button class="mch${p.sel[k]?' on':''}" ${off?'disabled':''} onclick="pickTog('${k}')">${esc(o.n)}${o.p?`<small>+${fmt(o.p)}</small>`:''}${off?'<small>Agotado</small>':''}</button>`}).join('')}`).join('')}
   <div class="lbl">Comentario</div><input class="f" id="ptx" maxlength="80" placeholder="Ej: sin cebolla, bien cocida" value="${esc(p.txt)}" oninput="pickTxt(this.value)">
-  <button class="big" onclick="pickOk()">${p.idx!=null?'Guardar cambios':'Agregar'} ${fmt(price)}</button></div></div>`;
+  <button class="big" onclick="pickOk()">Agregar ${fmt(price)}</button></div></div>`;
 }
 
 function cartSheet(){
@@ -176,7 +189,7 @@ function cartSheet(){
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh">
   <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Tu pedido</h3>
   <div class="sec">${dom?'🛵 Domicilio':'🍽️ '+esc(table||'Sin mesa')}</div>
-  ${cart.map((l,i)=>`<div class="ln"><div class="t" onclick="editLine(${i})" style="cursor:pointer"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span> <span style="display:block;color:var(--g);font-size:13px;font-weight:600;margin-top:2px">✏️ Toca para modificar o añadir algo</span></div>
+  ${cart.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span></div>
    <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
   <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
@@ -200,6 +213,7 @@ function doneView(){
   <p>Pedido <b>#${esc(orderId.slice(-4).toUpperCase())}</b>${type==='mesa'?' · '+esc(table):''}</p>
   ${cx?'<p class="sec">Comunícate con el local si tienes dudas.</p>':`<div class="steps">${st.map((s,i)=>`<span class="${i<=idx?'on':''}">${s[1]}</span>`).join('')}</div>
   <p class="sec">${type==='domicilio'?'Te contactaremos al número que dejaste si hace falta.':'Te lo llevamos a tu mesa.'}</p>`}
+  ${lastWa?`<a class="big" style="background:#25D366;text-decoration:none;margin-top:18px" href="${lastWa}" target="_blank" rel="noopener">💬 Enviar también por WhatsApp</a><p class="sec">Se abre WhatsApp con tu pedido listo: solo pulsa enviar.</p>`:''}
   <button class="big" style="margin-top:20px" onclick="reset()">Hacer otro pedido</button></div>`;
 }
 
@@ -218,18 +232,23 @@ function render(keepFocus){
   items.forEach(i=>{if(!cats.includes(i.cat))cats.push(i.cat)});
   const tables=(C&&C.tables)||[];
   const head=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1>${C&&C.slogan?`<p>${esc(C.slogan)}</p>`:''}
-   ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🛍️ Paso a recoger</button></div>
+   ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🍽️ Estoy en el local</button></div>
    ${type==='mesa'?`<select class="f" onchange="setTable(this.value)" aria-label="Mesa"><option value="">Elige tu mesa…</option>${tables.map(t=>`<option ${t===table?'selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`}
    </header>`;
   const closed=!isOpen()?`<div class="msg">😴 Por ahora no estamos recibiendo pedidos por este medio. ${esc((C&&C.closedMsg)||'')}</div>`:'';
-  const chips=`<nav class="chips">${cats.map(c=>`<button onclick="goCat(${JSON.stringify(c).replace(/"/g,'&quot;')})">${esc(c)}</button>`).join('')}</nav>`;
-  const list=cats.map(c=>`<h2 class="cat" id="c_${esc(c)}">${esc(c)}</h2>`+items.filter(i=>i.cat===c).map(i=>{
+  catList=cats;if(!catSel||!cats.includes(catSel))catSel=cats[0]||null;
+  const itemRow=i=>{
     const out=outOf(i),q=qtyOf(i.id);
-    return `<div class="it${out?' out':''}"><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
-    <div class="in"><b>${esc(i.name)}</b><div class="pr">${fmt(i.price)}</div>${q?`<div class="sec">En tu pedido: ${q}</div>`:''}</div>
-    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div>`}).join('')).join('');
+    return `<div class="card${out?' out':''}"><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
+    <div class="in"><h3>${esc(i.name)}</h3>${i.desc?`<p class="ds">${esc(i.desc)}</p>`:''}
+    <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en tu pedido</span>`:''}</div>
+    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
+  const side=`<nav class="side" aria-label="Categorías">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);
+    return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
+  const body=`<div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(itemRow).join('')}</main></div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
-  el.innerHTML=head+closed+chips+list+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
+  const dbg=P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v8 (con WhatsApp)\nWhatsApp: ${(C&&C.wa)?C.wa:'NO CONFIGURADO'}\nZonas de domicilio: ${zones().length}\nOrden de categorías: ${(C&&C.catOrd)?'propio':'por defecto'}\nPedidos: ${isOpen()?'abiertos':'cerrados'}</pre>`:'';
+  el.innerHTML=head+closed+body+dbg+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
