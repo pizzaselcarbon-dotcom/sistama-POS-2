@@ -211,7 +211,7 @@ function render(keep){
   if(view==='acct'){
     const L=(ST[table]||{}).l||[],tot=L.reduce((s,l)=>s+l.p*l.q,0);
     el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>Cuenta · ${esc(table)}</h1></div><div style="padding:0 16px 90px">
-    ${L.length?L.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.n)}</b>${(l.m||[]).length?`<em>${l.m.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.p*l.q)}</span></div><div class="qty"><b>× ${l.q}</b><button onclick="removeLine(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):'<p class="sec" style="padding:20px 0">La mesa no tiene productos (cuenta cerrada o vacía).</p>'}
+    ${(!L.length&&(ST[table]||{}).n>0)?'<p class="sec" style="padding:20px 0;color:#c0392b">Esta mesa tiene '+ST[table].n+' producto(s), pero el POS aún no envía el detalle. Actualiza el POS (index.html y sw.js) y ábrelo con sesión iniciada.</p>':''}${L.length?L.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.n)}</b>${(l.m||[]).length?`<em>${l.m.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.p*l.q)}</span></div><div class="qty"><b>× ${l.q}</b><button onclick="removeLine(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):'<p class="sec" style="padding:20px 0">La mesa no tiene productos (cuenta cerrada o vacía).</p>'}
     <div class="tot"><span>Total</span><span>${fmt(tot)}</span></div>
     <p class="sec">Con − quitas un producto (cocina recibe aviso de anular). Para cambiar uno: quítalo y agrega el nuevo.</p>
     <button class="big" onclick="goOrder()">➕ Agregar más productos</button></div>`;
