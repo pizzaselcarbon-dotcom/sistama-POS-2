@@ -93,7 +93,11 @@ let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1';
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},()=>{loaded.c=true;render()});
 onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},()=>{loaded.i=true;render()});
-onSnapshot(doc(db,'menu','status'),s=>{ST=s.exists()?(s.data().tables||{}):{};if((view==='tables'||view==='acct')&&!pick)render()},()=>{});
+onSnapshot(doc(db,'menu','status'),s=>{ST=s.exists()?(s.data().tables||{}):{};
+  Object.keys(ready).forEach(t=>{if(!(ST[t]&&ST[t].n>0))delete ready[t]});
+  Object.keys(carts).forEach(t=>{if(!(ST[t]&&ST[t].n>0)&&!(carts[t]||[]).length)delete carts[t]});
+  if(view==='acct'&&table&&!(ST[table]&&ST[table].n>0)){const tb=table;pick=null;table=null;view='tables';toast('💰 '+tb+' cobrada · mesa libre',true)}
+  if((view==='tables'||view==='acct')&&!pick)render()},()=>{});
 
 const modGroups=it=>(it.mods||[]).map(id=>mods.find(m=>String(m.id)===String(id))).filter(Boolean);
 const outOf=it=>it.stock!=null&&it.stock<=0;
@@ -121,12 +125,12 @@ window.openTable=name=>{
 window.goOrder=()=>{view='order';catSel=null;window.scrollTo(0,0);render()};
 window.goAcct=()=>{view='acct';window.scrollTo(0,0);render()};
 let remBusy=false;
-window.removeLine=async i=>{
+window.removeLine=async (i,q)=>{q=q||1;
   const l=((ST[table]||{}).l||[])[i];if(!l||remBusy)return;
   if(!waiter.trim()){toast('Escribe tu nombre en la lista de mesas');return}
-  if(!confirm('¿Quitar 1 '+l.n+' de '+table+'? Se avisará a cocina.'))return;
+  if(!confirm('¿Quitar '+q+' '+l.n+' de '+table+'? Se avisará a cocina.'))return;
   remBusy=true;
-  try{await addDoc(collection(db,'orders'),{type:'mesa',table,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:1,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});toast('✏️ Cambio enviado a cocina',true)}
+  try{await addDoc(collection(db,'orders'),{type:'mesa',table,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});toast('✏️ Cambio enviado a cocina',true)}
   catch(e){toast('No se pudo enviar el cambio')}
   remBusy=false;
 };
@@ -142,6 +146,7 @@ window.pickTxt=v=>{pick.txt=v};
 window.pickOk=()=>{
   const opts=[];pick.g.forEach(m=>m.opts.forEach((o,j)=>{if(pick.sel[m.id+'_'+j])opts.push(o)}));
   if(pick.txt.trim())opts.push({n:pick.txt.trim().slice(0,80),p:0});
+  if(pick.acct){applyAcct(opts);return}
   if(pick.ed!=null){const l=cart[pick.ed];if(l){const key=pick.it.id+'|'+opts.map(o=>o.n).join(','),price=pick.it.price+opts.reduce((a,o)=>a+(+o.p||0),0),other=cart.findIndex((x,i)=>i!==pick.ed&&x.key===key);l.mods=opts.map(o=>o.n);l.price=price;l.key=key;if(other>=0){cart[other].qty+=l.qty;cart.splice(pick.ed,1)}}pick=null;render();return}
   addLine(pick.it,opts);pick=null;render();
 };
@@ -151,6 +156,34 @@ window.closeCart=()=>{cartOpen=false;render()};
 window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);if(d>0&&it&&it.stock!=null&&qtyOf(l.id)>=it.stock){toast('Solo quedan '+it.stock);return}l.qty+=d;if(l.qty<=0)cart.splice(i,1);if(!cart.length)cartOpen=false;render(true)};
 window.fld=v=>{note=v};
 
+function watchOrder(ref,tb){
+  let nr=false,nc=false;
+  onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;
+    if(st==='ready'&&!nr){nr=true;ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo para servir',true);render()}
+    if(st==='cancelled'&&!nc){nc=true;toast('❌ Pedido de '+tb+' cancelado')}},()=>{});
+}
+window.editAcct=i=>{
+  const l=((ST[table]||{}).l||[])[i];if(!l)return;
+  const it=items.find(x=>String(x.id)===String(l.i));if(!it){toast('Este producto ya no está en el menú');return}
+  const g=modGroups(it),sel={},used=new Set(),ms=l.m||[];
+  g.forEach(m=>m.opts.forEach((o,j)=>{if(ms.includes(o.n)&&!used.has(o.n)){sel[m.id+'_'+j]=true;used.add(o.n)}}));
+  pick={it,g,sel,txt:ms.filter(n=>!used.has(n)).join(', ').slice(0,80),ed:null,acct:{i,q:1,max:l.q}};render()};
+window.acctQty=d=>{const a=pick.acct;a.q=Math.max(1,Math.min(a.max,a.q+d));render(true)};
+window.acctDel=()=>{const a=pick.acct;pick=null;removeLine(a.i,a.q)};
+async function applyAcct(opts){
+  const a=pick.acct,l=((ST[table]||{}).l||[])[a.i],it=pick.it;if(!l){pick=null;return render()}
+  const nm=opts.map(o=>o.n);
+  if(JSON.stringify(nm)===JSON.stringify(l.m||[])){pick=null;return render()}
+  if(!waiter.trim()){toast('Escribe tu nombre en la lista de mesas');return}
+  if(remBusy)return;remBusy=true;
+  const price=it.price+opts.reduce((x,o)=>x+(+o.p||0),0),q=a.q,tb=table;pick=null;render();
+  try{
+    await addDoc(collection(db,'orders'),{type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});
+    const ref=await addDoc(collection(db,'orders'),{type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:('CAMBIO: '+it.name+(nm.length?' → '+nm.join(', '):'')).slice(0,300),pay:'mesera',fee:0,lines:[{id:it.id,name:it.name,qty:q,price,mods:nm,cat:it.cat||''}],total:price*q,status:'new',createdAt:serverTimestamp()});
+    watchOrder(ref,tb);toast('✏️ Cambio enviado a cocina',true);
+  }catch(e){toast('No se pudo enviar el cambio')}
+  remBusy=false;
+}
 window.send=async()=>{
   if(sending)return;err='';
   if(!cart.length){err='Agrega productos al pedido.';return render(true)}
@@ -162,10 +195,7 @@ window.send=async()=>{
     toast('✅ Enviado a cocina · '+tb,true);
     cart=[];carts[tb]=[];note='';cartOpen=false;sending=false;view='tables';table=null;
     sent[tb]=Date.now();
-    let nr=false,nc=false;
-    onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;
-      if(st==='ready'&&!nr){nr=true;ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo para servir',true);render()}
-      if(st==='cancelled'&&!nc){nc=true;toast('❌ Pedido de '+tb+' cancelado')}},()=>{});
+    watchOrder(ref,tb);
     render();
   }catch(e){sending=false;err='No se pudo enviar. Revisa la conexión e intenta de nuevo.';render(true)}
 };
@@ -181,7 +211,8 @@ function pickSheet(){
   return `<div class="ov" onclick="if(event.target===this)closePick()"><div class="sh"><button class="x" onclick="closePick()" aria-label="Cerrar">✕</button><h3>${esc(p.it.name)}</h3><div class="sec">${fmt(p.it.price)}</div>
   ${p.g.map(m=>`<div class="lbl">${esc(m.name)}</div>${m.opts.map((o,j)=>{const k=m.id+'_'+j,off=o.s!=null&&o.s<=0;return `<button class="mch${p.sel[k]?' on':''}" ${off?'disabled':''} onclick="pickTog('${k}')">${esc(o.n)}${o.p?`<small>+${fmt(o.p)}</small>`:''}${off?'<small>Agotado</small>':''}</button>`}).join('')}`).join('')}
   <div class="lbl">Comentario</div><input class="f" id="ptx" maxlength="80" placeholder="Ej: sin cebolla, bien cocida" value="${esc(p.txt)}" oninput="pickTxt(this.value)">
-  <button class="big" onclick="pickOk()">${p.ed!=null?'Guardar cambios':'Agregar'} ${fmt(price)}</button></div></div>`;
+  ${p.acct?`${p.acct.max>1?`<div class="lbl">¿Cuántas unidades cambiar?</div><div class="qty" style="margin-bottom:8px"><button onclick="acctQty(-1)">−</button><b>${p.acct.q} de ${p.acct.max}</b><button onclick="acctQty(1)">+</button></div>`:''}<p class="sec">Cocina recibirá aviso de anular el anterior y el nuevo pedido.</p>`:''}
+  <button class="big" onclick="pickOk()">${p.acct?'Guardar cambio':(p.ed!=null?'Guardar cambios':'Agregar')} ${fmt(price)}</button>${p.acct?'<button class="big" style="margin-top:8px;background:#c0392b" onclick="acctDel()">🗑 Quitar '+(p.acct.q>1?p.acct.q+' unidades':'este producto')+'</button>':''}</div></div>`;
 }
 function cartSheet(){
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Pedido · ${esc(table)}</h3>
@@ -203,7 +234,7 @@ function render(keep){
     el.innerHTML=`<div class="topbar"><h1>🧑‍🍳 Meseras · ${esc((C&&C.biz)||'')}</h1></div>
     <div class="who"><div class="lbl" style="margin-top:0">Mesera</div><input class="f" id="wn" placeholder="Tu nombre" maxlength="40" value="${esc(waiter)}" oninput="setName(this.value)"></div>
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
-    <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=ready[t];
+    <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}`;
     return;
@@ -211,10 +242,10 @@ function render(keep){
   if(view==='acct'){
     const L=(ST[table]||{}).l||[],tot=L.reduce((s,l)=>s+l.p*l.q,0);
     el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>Cuenta · ${esc(table)}</h1></div><div style="padding:0 16px 90px">
-    ${L.length?L.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.n)}</b>${(l.m||[]).length?`<em>${l.m.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.p*l.q)}</span></div><div class="qty"><b>× ${l.q}</b><button onclick="removeLine(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):'<p class="sec" style="padding:20px 0">La mesa no tiene productos (cuenta cerrada o vacía).</p>'}
+    ${(!L.length&&(ST[table]||{}).n>0)?'<p class="sec" style="padding:20px 0;color:#c0392b">Esta mesa tiene '+ST[table].n+' producto(s), pero el POS aún no envía el detalle. Actualiza el POS (index.html y sw.js) y ábrelo con sesión iniciada.</p>':''}${L.length?L.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editAcct(${i})" role="button" tabindex="0"><b>${esc(l.n)}</b>${(l.m||[]).length?`<em>${l.m.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.p*l.q)} · ✎ Toca para modificar</span></div><div class="qty"><b>× ${l.q}</b><button onclick="removeLine(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):(((ST[table]||{}).n>0)?'<p class="sec" style="padding:20px 0">⚠️ El POS aún no envía el detalle de la cuenta. Abre el POS actualizado (versión nueva) y pulsa Configuración → Pedidos online → Publicar; en unos segundos aparecerá aquí.</p>':'<p class="sec" style="padding:20px 0">La mesa no tiene productos (cuenta cerrada o vacía).</p>')}
     <div class="tot"><span>Total</span><span>${fmt(tot)}</span></div>
-    <p class="sec">Con − quitas un producto (cocina recibe aviso de anular). Para cambiar uno: quítalo y agrega el nuevo.</p>
-    <button class="big" onclick="goOrder()">➕ Agregar más productos</button></div>`;
+    <p class="sec">Toca un producto para cambiarlo (sin cebolla, adicionales…) o quitarlo. El − quita una unidad. Cocina recibe aviso de cada cambio.</p>
+    <button class="big" onclick="goOrder()">➕ Agregar más productos</button></div>`+(pick?pickSheet():'');
     return;
   }
   let cats=((C&&C.cats)||[]).filter(c=>items.some(i=>i.cat===c));
