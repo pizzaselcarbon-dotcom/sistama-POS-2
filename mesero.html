@@ -93,7 +93,7 @@ let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1';
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},()=>{loaded.c=true;render()});
 onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},()=>{loaded.i=true;render()});
-onSnapshot(doc(db,'menu','status'),s=>{ST=s.exists()?(s.data().tables||{}):{};if(view==='tables'&&!pick)render()},()=>{});
+onSnapshot(doc(db,'menu','status'),s=>{ST=s.exists()?(s.data().tables||{}):{};if((view==='tables'||view==='acct')&&!pick)render()},()=>{});
 
 const modGroups=it=>(it.mods||[]).map(id=>mods.find(m=>String(m.id)===String(id))).filter(Boolean);
 const outOf=it=>it.stock!=null&&it.stock<=0;
@@ -116,7 +116,19 @@ window.checkPin=async()=>{const v=($('#pin')||{}).value||'';try{if(await sha(v.t
 window.setName=v=>{waiter=v;LS.set('w_name',v)};
 window.openTable=name=>{
   if(table)carts[table]=cart;
-  table=name;cart=carts[name]||[];view='order';catSel=null;delete ready[name];err='';window.scrollTo(0,0);render();
+  table=name;cart=carts[name]||[];view=(ST[name]&&ST[name].n>0&&!cart.length)?'acct':'order';catSel=null;delete ready[name];err='';window.scrollTo(0,0);render();
+};
+window.goOrder=()=>{view='order';catSel=null;window.scrollTo(0,0);render()};
+window.goAcct=()=>{view='acct';window.scrollTo(0,0);render()};
+let remBusy=false;
+window.removeLine=async i=>{
+  const l=((ST[table]||{}).l||[])[i];if(!l||remBusy)return;
+  if(!waiter.trim()){toast('Escribe tu nombre en la lista de mesas');return}
+  if(!confirm('¿Quitar 1 '+l.n+' de '+table+'? Se avisará a cocina.'))return;
+  remBusy=true;
+  try{await addDoc(collection(db,'orders'),{type:'mesa',table,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:1,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});toast('✏️ Cambio enviado a cocina',true)}
+  catch(e){toast('No se pudo enviar el cambio')}
+  remBusy=false;
 };
 window.backTables=()=>{carts[table]=cart;table=null;view='tables';cartOpen=false;window.scrollTo(0,0);render()};
 window.openCat=i=>{catSel=catList[i]||null;window.scrollTo(0,0);render()};
@@ -192,8 +204,17 @@ function render(keep){
     <div class="who"><div class="lbl" style="margin-top:0">Mesera</div><input class="f" id="wn" placeholder="Tu nombre" maxlength="40" value="${esc(waiter)}" oninput="setName(this.value)"></div>
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=ready[t];
-      return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
+      return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}`;
+    return;
+  }
+  if(view==='acct'){
+    const L=(ST[table]||{}).l||[],tot=L.reduce((s,l)=>s+l.p*l.q,0);
+    el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>Cuenta · ${esc(table)}</h1></div><div style="padding:0 16px 90px">
+    ${L.length?L.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.n)}</b>${(l.m||[]).length?`<em>${l.m.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.p*l.q)}</span></div><div class="qty"><b>× ${l.q}</b><button onclick="removeLine(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):'<p class="sec" style="padding:20px 0">La mesa no tiene productos (cuenta cerrada o vacía).</p>'}
+    <div class="tot"><span>Total</span><span>${fmt(tot)}</span></div>
+    <p class="sec">Con − quitas un producto (cocina recibe aviso de anular). Para cambiar uno: quítalo y agrega el nuevo.</p>
+    <button class="big" onclick="goOrder()">➕ Agregar más productos</button></div>`;
     return;
   }
   let cats=((C&&C.cats)||[]).filter(c=>items.some(i=>i.cat===c));
@@ -205,7 +226,7 @@ function render(keep){
     <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en el pedido · ✎ toca para modificar</span>`:''}</div><button class="add" ${out||!isOpen()?'disabled':''} onclick="event.stopPropagation();tapAdd(${i.id})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
   const side=`<nav class="side">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb${catName(c).length>10?' lg':''}">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Enviar a cocina (${count()})</span><span>${fmt(sub())}</span></button></div>`:'';
-  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${esc(table)}</h1></div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
+  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${esc(table)}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
   const s2=document.querySelector('.sh');if(s2&&st)s2.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
