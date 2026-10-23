@@ -63,7 +63,8 @@ header.top select.f{margin:10px 0 0}
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getFirestore,collection,doc,addDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import {FIREBASE_CONFIG} from "./firebase-config.js";
+import * as CONF from "./firebase-config.js";
+const FIREBASE_CONFIG=CONF.FIREBASE_CONFIG,WA_FIJO=String(CONF.WHATSAPP||'');
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -135,6 +136,7 @@ window.reset=()=>{lastWa='';if(unsub){unsub();unsub=null}cart=[];orderId=null;or
 const isOpen=()=>!C||C.open!==false;
 
 let lastWa='';
+function waDigits(){let d=String((C&&C.wa)||WA_FIJO||'').replace(/\D/g,'');if(d.length===10&&d[0]==='3')d='57'+d;return d}
 function waUrl(num,id,name,phone,address){
   const L=[];L.push('*Nuevo pedido a domicilio* #'+id.slice(-4).toUpperCase());
   L.push('Cliente: '+name);L.push('Teléfono: '+phone);if(zone)L.push('Zona: '+zone);L.push('Dirección: '+address);
@@ -154,7 +156,7 @@ window.send=async()=>{
     if(!name||!phone||!address){err='Para domicilio necesitamos tu nombre, teléfono y dirección.';return render(true)}
     if(phone.replace(/\D/g,'').length<7){err='Revisa tu número de teléfono.';return render(true)}
   }
-  const waNum=((C&&C.wa)||'').replace(/\D/g,'');let wa=null;if(type==='domicilio'&&waNum){try{wa=window.open('','_blank')}catch(e){wa=null}}
+  const waNum=waDigits();let wa=null;if(type==='domicilio'&&waNum){try{wa=window.open('','_blank')}catch(e){wa=null}}
   sending=true;render(true);
   const total=sub()+fee();
   try{
@@ -225,7 +227,7 @@ function render(keepFocus){
   if(err&&!C&&!items.length){el.innerHTML=`<p style="padding:40px 16px">${esc(err)}</p>`;return}
   if(!items.length){el.innerHTML=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1></header><p style="padding:24px 16px;color:var(--mu)">El menú aún no está publicado. Vuelve en unos minutos.</p>`;return}
   document.title=((C&&C.biz)||'Menú')+' · Menú digital';
-  if(orderId){el.innerHTML=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1></header>`+doneView();return}
+  if(orderId){el.innerHTML=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1></header>`+doneView()+(P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v9\nWhatsApp: ${waDigits()||'NO CONFIGURADO'}\nEnlace: ${lastWa?'listo':'no se generó'}</pre>`:'');return}
   const CORD=[/pizza/,/hambur/,/perro/,/salchi/,/picada/,/choripollo/,/gaseosa|bebida/],rk=c=>{const i=CORD.findIndex(r=>r.test(String(c||'').toLowerCase()));return i<0?99:i};
   let cats=((C&&C.cats)||[]).filter(c=>items.some(i=>i.cat===c));
   if(!(C&&C.catOrd))cats=cats.map((c,i)=>[c,i]).sort((a,b)=>rk(a[0])-rk(b[0])||a[1]-b[1]).map(x=>x[0]);
@@ -247,7 +249,7 @@ function render(keepFocus){
     return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const body=`<div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(itemRow).join('')}</main></div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
-  const dbg=P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v8 (con WhatsApp)\nWhatsApp: ${(C&&C.wa)?C.wa:'NO CONFIGURADO'}\nZonas de domicilio: ${zones().length}\nOrden de categorías: ${(C&&C.catOrd)?'propio':'por defecto'}\nPedidos: ${isOpen()?'abiertos':'cerrados'}</pre>`:'';
+  const dbg=P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v9\nWhatsApp: ${waDigits()||'NO CONFIGURADO'} ${(C&&C.wa)?'(desde el POS)':(WA_FIJO?'(fijo en el menú)':'')}\nZonas de domicilio: ${zones().length}\nOrden de categorías: ${(C&&C.catOrd)?'propio':'por defecto'}\nPedidos: ${isOpen()?'abiertos':'cerrados'}</pre>`:'';
   el.innerHTML=head+closed+body+dbg+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
