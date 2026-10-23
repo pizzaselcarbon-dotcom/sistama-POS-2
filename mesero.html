@@ -236,7 +236,9 @@ function render(keep){
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
-    ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}`;
+    ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}
+    <p class="sec" style="padding:0 16px 20px">Meseras v15 · ${items.length} productos · ${items.filter(i=>(i.mods||[]).length).length} con modificadores · ${mods.length} grupos de modificadores</p>
+    <p class="sec" style="padding:0 16px 20px">${(()=>{const cs={};items.forEach(i=>{const n=modGroups(i).length;(cs[i.cat]=cs[i.cat]||{t:0,m:0}).t++;if(n)cs[i.cat].m++});return Object.keys(cs).map(c=>esc(c)+': '+cs[c].m+'/'+cs[c].t).join(' · ')})()} <br>(categoría: productos con modificadores / total)</p>`;
     return;
   }
   if(view==='acct'){
