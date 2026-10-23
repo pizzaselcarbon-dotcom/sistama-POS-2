@@ -18,14 +18,15 @@ header.top h1{margin:0;font-size:22px}header.top p{margin:2px 0 0;opacity:.75;fo
 .pill{display:inline-block;margin-top:12px;background:rgba(255,255,255,.14);padding:6px 12px;border-radius:16px;font-size:14px}
 select.f,input.f,textarea.f{width:100%;padding:12px;border:1px solid var(--ln);border-radius:10px;background:var(--bg);color:var(--tx);font:inherit;margin:4px 0 10px}
 header.top select.f{margin:10px 0 0}
-.lay{display:flex;gap:10px;padding:12px;align-items:flex-start}
-.side{flex:none;width:96px;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;scrollbar-width:none}
+.lay{display:flex;gap:8px;padding:10px;align-items:flex-start}
+.side{flex:none;width:74px;position:sticky;top:8px;max-height:calc(100vh - 16px);overflow-y:auto;display:flex;flex-direction:column;gap:8px;scrollbar-width:none}
 .side::-webkit-scrollbar{display:none}
-.tile{position:relative;display:block;width:100%;padding:0;border:2px solid var(--ln);border-radius:16px;background:var(--sf);overflow:hidden;color:var(--tx)}
-.tile .ic{display:flex;align-items:center;justify-content:center;height:62px;font-size:32px;background:var(--sf)}
-.tile .lb{display:flex;align-items:center;justify-content:center;min-height:40px;padding:4px 2px;font-size:11.5px;letter-spacing:-.2px;font-weight:700;text-align:center;line-height:1.15;background:var(--bg);overflow-wrap:anywhere}
+.tile{position:relative;display:block;width:100%;padding:0;border:2px solid var(--ln);border-radius:12px;background:var(--sf);overflow:hidden;color:var(--tx)}
+.tile .ic{display:flex;align-items:center;justify-content:center;height:40px;font-size:22px;background:var(--sf)}
+.tile .lb{display:flex;align-items:center;justify-content:center;min-height:28px;padding:3px 1px;font-size:10px;letter-spacing:-.2px;font-weight:700;text-align:center;line-height:1.15;background:var(--bg);overflow-wrap:anywhere}
+.tile .lb.lg{font-size:8.6px;letter-spacing:-.3px}
 .tile.on{border-color:var(--g)}.tile.on .lb{color:var(--g)}
-.tile .bd{position:absolute;top:4px;right:4px;background:var(--g);color:#fff;border-radius:11px;min-width:22px;padding:1px 6px;font-size:12px;font-weight:700}
+.tile .bd{position:absolute;top:3px;right:3px;background:var(--g);color:#fff;border-radius:9px;min-width:18px;padding:0 5px;font-size:11px;font-weight:700}
 .main{flex:1;min-width:0;display:flex;flex-direction:column;gap:12px}
 .card{display:flex;gap:12px;padding:12px;background:var(--bg);color:var(--tx);border:1px solid var(--ln);border-radius:20px}
 .card.out{opacity:.55}
@@ -119,9 +120,30 @@ window.tapAdd=id=>{
 };
 window.pickTog=(k)=>{const [mi,j]=k.split('_'),o=pick.g.find(m=>String(m.id)===mi).opts[j];if(!pick.sel[k]&&o.s!=null&&o.s<=0){toast(o.n+' está agotado');return}pick.sel[k]=!pick.sel[k];render(true)};
 window.pickTxt=v=>{pick.txt=v};
+window.editLine=i=>{
+  const l=cart[i];if(!l)return;const it=items.find(x=>x.id===l.id);if(!it)return;
+  const g=modGroups(it),sel={},used=new Set();
+  g.forEach(m=>m.opts.forEach((o,j)=>{if(l.mods.includes(o.n)&&!used.has(o.n)){sel[m.id+'_'+j]=true;used.add(o.n)}}));
+  pick={it,g,sel,txt:l.mods.filter(n=>!used.has(n)).join(', ').slice(0,80),ed:i};render();
+};
+window.cardTap=id=>{
+  const ix=cart.map((l,i)=>l.id===id?i:-1).filter(i=>i>=0);
+  if(!ix.length)return;
+  ix.length===1?editLine(ix[0]):openCart();
+};
 window.pickOk=()=>{
   const opts=[];pick.g.forEach(m=>m.opts.forEach((o,j)=>{if(pick.sel[m.id+'_'+j])opts.push(o)}));
   if(pick.txt.trim())opts.push({n:pick.txt.trim().slice(0,80),p:0});
+  if(pick.ed!=null){
+    const l=cart[pick.ed];
+    if(l){
+      const key=pick.it.id+'|'+opts.map(o=>o.n).join(','),price=pick.it.price+opts.reduce((a,o)=>a+(+o.p||0),0);
+      const other=cart.findIndex((x,i)=>i!==pick.ed&&x.key===key);
+      l.mods=opts.map(o=>o.n);l.price=price;l.key=key;
+      if(other>=0){cart[other].qty+=l.qty;cart.splice(pick.ed,1)}
+    }
+    pick=null;render();return;
+  }
   addLine(pick.it,opts);pick=null;render();
 };
 window.closePick=()=>{pick=null;render()};
@@ -182,7 +204,7 @@ function pickSheet(){
   ${p.g.map(m=>`<div class="lbl">${esc(m.name)}</div>${m.opts.map((o,j)=>{const k=m.id+'_'+j,off=o.s!=null&&o.s<=0;
     return `<button class="mch${p.sel[k]?' on':''}" ${off?'disabled':''} onclick="pickTog('${k}')">${esc(o.n)}${o.p?`<small>+${fmt(o.p)}</small>`:''}${off?'<small>Agotado</small>':''}</button>`}).join('')}`).join('')}
   <div class="lbl">Comentario</div><input class="f" id="ptx" maxlength="80" placeholder="Ej: sin cebolla, bien cocida" value="${esc(p.txt)}" oninput="pickTxt(this.value)">
-  <button class="big" onclick="pickOk()">Agregar ${fmt(price)}</button></div></div>`;
+  <button class="big" onclick="pickOk()">${p.ed!=null?'Guardar cambios':'Agregar'} ${fmt(price)}</button></div></div>`;
 }
 
 function cartSheet(){
@@ -191,7 +213,7 @@ function cartSheet(){
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh">
   <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Tu pedido</h3>
   <div class="sec">${dom?'🛵 Domicilio':'🍽️ '+esc(table||'Sin mesa')}</div>
-  ${cart.map((l,i)=>`<div class="ln"><div class="t"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)}</span></div>
+  ${cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div>
    <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
   <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
@@ -241,16 +263,16 @@ function render(keepFocus){
   catList=cats;if(!catSel||!cats.includes(catSel))catSel=cats[0]||null;
   const itemRow=i=>{
     const out=outOf(i),q=qtyOf(i.id);
-    return `<div class="card${out?' out':''}"><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
+    return `<div class="card${out?' out':''}"${q?` onclick="cardTap(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" style="cursor:pointer"`:''}><div class="ph">${i.img?`<img src="${i.img}" alt="" loading="lazy">`:esc(i.emoji||'🍽️')}</div>
     <div class="in"><h3>${esc(i.name)}</h3>${i.desc?`<p class="ds">${esc(i.desc)}</p>`:''}
-    <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en tu pedido</span>`:''}</div>
-    <button class="add" ${out||!isOpen()?'disabled':''} onclick="tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
+    <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en tu pedido · ✎ toca para modificar</span>`:''}</div>
+    <button class="add" ${out||!isOpen()?'disabled':''} onclick="event.stopPropagation();tapAdd(${typeof i.id==='number'?i.id:JSON.stringify(i.id).replace(/"/g,'&quot;')})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
   const side=`<nav class="side" aria-label="Categorías">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);
-    return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
+    return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb${catName(c).length>10?' lg':''}">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const body=`<div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(itemRow).join('')}</main></div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
   const dbg=P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v9\nWhatsApp: ${waDigits()||'NO CONFIGURADO'} ${(C&&C.wa)?'(desde el POS)':(WA_FIJO?'(fijo en el menú)':'')}\nZonas de domicilio: ${zones().length}\nOrden de categorías: ${(C&&C.catOrd)?'propio':'por defecto'}\nPedidos: ${isOpen()?'abiertos':'cerrados'}</pre>`:'';
-  el.innerHTML=head+closed+body+dbg+bar+(pick?pickSheet():'')+(cartOpen?cartSheet():'');
+  el.innerHTML=head+closed+body+dbg+bar+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
