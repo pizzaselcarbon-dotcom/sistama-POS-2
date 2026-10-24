@@ -5,7 +5,11 @@
 <title>Meseras</title><link rel="icon" href="data:,">
 <style>
 :root{--ink:#1D2230;--g:#CC441B;--bg:#fff;--tx:#1B1F27;--mu:#6B7280;--ln:#E4E8EE;--sf:#F1F3F7;--ok:#1F9D63;--okbg:#DDF3E8;--wr:#FFF1D6;color-scheme:light dark}
-@media (prefers-color-scheme:dark){:root{--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}}
+:root[data-theme=dark]{color-scheme:dark;--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}
+:root[data-theme=light]{color-scheme:light}
+.tt{flex:none;width:38px;height:38px;border-radius:50%;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.1);color:#fff;font-size:19px;line-height:1;padding:0;display:inline-flex;align-items:center;justify-content:center}
+header.top .tt{position:absolute;top:14px;right:14px}header.top{position:relative}
 *{box-sizing:border-box}html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--tx);font:16px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding-bottom:96px}
 button{font:inherit;cursor:pointer}
@@ -71,7 +75,10 @@ header.top select.f{margin:10px 0 0}
 .pin{max-width:320px;margin:60px auto;padding:0 20px;text-align:center}
 .pin input{text-align:center;font-size:24px;letter-spacing:.3em}
 .sb{position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:60;background:#1F9D63;color:#fff;padding:12px 18px;border-radius:14px;font-weight:700;max-width:92%;text-align:center;box-shadow:0 6px 20px rgba(0,0,0,.3)}
-</style></head><body>
+</style><script>try{var t=localStorage.getItem('theme');if(t)document.documentElement.setAttribute('data-theme',t)}catch(e){}
+function isDark(){var t=document.documentElement.getAttribute('data-theme');return t?t==='dark':matchMedia('(prefers-color-scheme:dark)').matches}
+function themeBtn(){return '<button class="tt" onclick="toggleTheme()" aria-label="'+(isDark()?'Activar modo claro':'Activar modo oscuro')+'" title="'+(isDark()?'Modo claro':'Modo oscuro')+'">'+(isDark()?'☀️':'🌙')+'</button>'}
+function toggleTheme(){var n=isDark()?'light':'dark';document.documentElement.setAttribute('data-theme',n);try{localStorage.setItem('theme',n)}catch(e){}var m=document.querySelector('meta[name=theme-color]');document.querySelectorAll('.tt').forEach(function(b){b.outerHTML=themeBtn()})}</script></head><body>
 <div class="wrap" id="app"><p style="padding:40px 16px;color:var(--mu)">Cargando…</p></div>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
@@ -231,7 +238,7 @@ function render(keep){
   if(!items.length){el.innerHTML='<p style="padding:40px 16px;color:var(--mu)">El menú aún no está publicado desde el POS.</p>';return}
   if(view==='tables'){
     const tables=(C&&C.tables)||[];
-    el.innerHTML=`<div class="topbar"><h1>🧑‍🍳 Meseras · ${esc((C&&C.biz)||'')}</h1></div>
+    el.innerHTML=`<div class="topbar"><h1>🧑‍🍳 Meseras · ${esc((C&&C.biz)||'')}</h1>${themeBtn()}</div>
     <div class="who"><div class="lbl" style="margin-top:0">Mesera</div><input class="f" id="wn" placeholder="Tu nombre" maxlength="40" value="${esc(waiter)}" oninput="setName(this.value)"></div>
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
@@ -243,7 +250,7 @@ function render(keep){
   }
   if(view==='acct'){
     const L=(ST[table]||{}).l||[],tot=L.reduce((s,l)=>s+l.p*l.q,0);
-    el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>Cuenta · ${esc(table)}</h1></div><div style="padding:0 16px 90px">
+    el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>Cuenta · ${esc(table)}</h1>${themeBtn()}</div><div style="padding:0 16px 90px">
     ${(!L.length&&(ST[table]||{}).n>0)?'<p class="sec" style="padding:20px 0;color:#c0392b">Esta mesa tiene '+ST[table].n+' producto(s), pero el POS aún no envía el detalle. Actualiza el POS (index.html y sw.js) y ábrelo con sesión iniciada.</p>':''}${L.length?L.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editAcct(${i})" role="button" tabindex="0"><b>${esc(l.n)}</b>${(l.m||[]).length?`<em>${l.m.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.p*l.q)} · ✎ Toca para modificar</span></div><div class="qty"><b>× ${l.q}</b><button onclick="removeLine(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):(((ST[table]||{}).n>0)?'<p class="sec" style="padding:20px 0">⚠️ El POS aún no envía el detalle de la cuenta. Abre el POS actualizado (versión nueva) y pulsa Configuración → Pedidos online → Publicar; en unos segundos aparecerá aquí.</p>':'<p class="sec" style="padding:20px 0">La mesa no tiene productos (cuenta cerrada o vacía).</p>')}
     <div class="tot"><span>Total</span><span>${fmt(tot)}</span></div>
     <p class="sec">Toca un producto para cambiarlo (sin cebolla, adicionales…) o quitarlo. El − quita una unidad. Cocina recibe aviso de cada cambio.</p>
@@ -259,7 +266,7 @@ function render(keep){
     <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en el pedido · ✎ toca para modificar</span>`:''}</div><button class="add" ${out||!isOpen()?'disabled':''} onclick="event.stopPropagation();tapAdd(${i.id})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
   const side=`<nav class="side">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb${catName(c).length>10?' lg':''}">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Enviar a cocina (${count()})</span><span>${fmt(sub())}</span></button></div>`:'';
-  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${esc(table)}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
+  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${esc(table)}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
   const s2=document.querySelector('.sh');if(s2&&st)s2.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
