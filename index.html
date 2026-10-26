@@ -88,7 +88,7 @@ const P=new URLSearchParams(location.search);
 const mesaQR=(P.get('mesa')||'').slice(0,40);
 let C=null, items=[], mods=[], loaded={c:false,i:false};
 let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'';
-let cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
+let cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:''};
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},e=>{loaded.c=true;err='No se pudo cargar el menú.';render()});
@@ -154,7 +154,9 @@ window.pickOk=()=>{
   addLine(pick.it,opts);pick=null;render();
 };
 window.closePick=()=>{pick=null;render()};
-window.openCart=()=>{cartOpen=true;err='';render()};
+window.openCart=()=>{cartOpen=true;cstep=1;err='';render()};
+window.cNext=()=>{if(!cart.length)return;cstep=2;err='';render();const sh=document.querySelector('.sh');if(sh)sh.scrollTop=0};
+window.cBack=()=>{cstep=1;err='';render()};
 window.closeCart=()=>{cartOpen=false;render()};
 window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);
   if(d>0&&it&&it.stock!=null&&qtyOf(l.id)>=it.stock){toast('Solo quedan '+it.stock);return}
@@ -217,10 +219,12 @@ function cartSheet(){
   const pays=(C&&C.pays)||[];if(!form.pay)form.pay=pays[0]||'';
   const dom=type==='domicilio';
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh">
-  <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Tu pedido</h3>
+  <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>${cstep===1?'Tu pedido':'Tus datos'}</h3>
   <div class="sec">${dom?'🛵 Domicilio':'🍽️ '+esc(table||'Sin mesa')}</div>
-  ${cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div>
-   <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
+  ${cstep===2?`<button class="mch" style="margin:8px 0 0" onclick="cBack()">← Volver al pedido</button><div class="sec" style="margin-top:8px">${count()} producto${count()===1?'':'s'} · ${fmt(sub())}</div>`:''}
+  ${cstep===1?cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div>
+   <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join(''):''}
+  ${cstep===1?`<div class="tot"><span>Subtotal</span><span>${fmt(sub())}</span></div>${dom?'<div class="sec">El costo del domicilio se calcula en el siguiente paso.</div>':''}<button class="big" style="margin-top:12px" onclick="cNext()">Seguir con el pedido →</button>`:`
   <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
   ${dom&&zones().length?`<div class="lbl">¿A dónde enviamos?</div><select class="f" onchange="setZone(this.value)" aria-label="Zona de entrega"><option value="">Elige la zona…</option>${zones().map(z=>`<option value="${esc(z.n)}" ${z.n===zone?'selected':''}>${esc(z.n)} · ${fmt(z.p)}</option>`).join('')}</select>`:''}
@@ -232,7 +236,7 @@ function cartSheet(){
   ${dom&&zones().length&&!zone?`<div class="sec">Elige la zona para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
-  <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button></div></div>`;
+  <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button>`}</div></div>`;
 }
 
 function doneView(){
