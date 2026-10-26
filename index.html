@@ -87,6 +87,7 @@ const db=getFirestore(initializeApp(FIREBASE_CONFIG));
 const P=new URLSearchParams(location.search);
 const mesaQR=(P.get('mesa')||'').slice(0,40);
 let C=null, items=[], mods=[], loaded={c:false,i:false};
+const PICK='Para recoger';
 let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'';
 let cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:''};
@@ -111,7 +112,7 @@ function addLine(it,opts){
 }
 function toast(m){const d=document.createElement('div');d.textContent=m;d.style.cssText='position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:10px 16px;border-radius:20px;z-index:50;font-size:14px';document.body.appendChild(d);setTimeout(()=>d.remove(),2500)}
 
-window.setType=t=>{type=t;if(t==='domicilio')table='';render()};
+window.setType=t=>{type=t;table=(t==='domicilio')?'':(mesaQR||PICK);render()};
 window.setTable=v=>{table=v;render()};
 window.setZone=v=>{zone=v;LS.set('m_zone',v);render(true)};
 let catSel=null,catList=[];
@@ -181,7 +182,9 @@ window.send=async()=>{
   if(sending)return;err='';
   const name=form.name.trim(),phone=form.phone.trim(),address=form.address.trim();
   if(!cart.length){err='Agrega productos a tu pedido.';return render(true)}
-  if(type==='mesa'&&!table){err='Elige tu mesa.';return render(true)}
+  const rec=type==='mesa'&&table===PICK;
+  if(type==='mesa'&&!table){err='Falta la mesa. Escanea de nuevo el QR de tu mesa.';return render(true)}
+  if(rec&&!name){err='Escribe tu nombre para avisarte cuando esté listo.';return render(true)}
   if(type==='domicilio'){
     if(zones().length&&!zones().some(x=>x.n===zone)){err='Elige a qué zona va tu domicilio.';return render(true)}
     if(!name||!phone||!address){err='Para domicilio necesitamos tu nombre, teléfono y dirección.';return render(true)}
@@ -220,14 +223,15 @@ function cartSheet(){
   const dom=type==='domicilio';
   return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh">
   <button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>${cstep===1?'Tu pedido':'Tus datos'}</h3>
-  <div class="sec">${dom?'🛵 Domicilio':'🍽️ '+esc(table||'Sin mesa')}</div>
+  <div class="sec">${dom?'🛵 Domicilio':(table===PICK?'🏪 Paso a recoger':'🍽️ '+esc(table||'Sin mesa'))}</div>
   ${cstep===2?`<button class="mch" style="margin:8px 0 0" onclick="cBack()">← Volver al pedido</button><div class="sec" style="margin-top:8px">${count()} producto${count()===1?'':'s'} · ${fmt(sub())}</div>`:''}
   ${cstep===1?cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div>
    <div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join(''):''}
   ${cstep===1?`<div class="tot"><span>Subtotal</span><span>${fmt(sub())}</span></div>${dom?'<div class="sec">El costo del domicilio se calcula en el siguiente paso.</div>':''}<button class="big" style="margin-top:12px" onclick="cNext()">Seguir con el pedido →</button>`:`
-  <div class="lbl">${dom?'Tus datos':'Tu nombre (opcional)'}</div>
-  <input class="f" placeholder="Nombre${dom?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
+  <div class="lbl">${dom||table===PICK?'Tus datos':'Tu nombre (opcional)'}</div>
+  <input class="f" placeholder="Nombre${dom||table===PICK?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
   ${dom&&zones().length?`<div class="lbl">¿A dónde enviamos?</div><select class="f" onchange="setZone(this.value)" aria-label="Zona de entrega"><option value="">Elige la zona…</option>${zones().map(z=>`<option value="${esc(z.n)}" ${z.n===zone?'selected':''}>${esc(z.n)} · ${fmt(z.p)}</option>`).join('')}</select>`:''}
+  ${!dom&&table===PICK?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono (opcional)" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">`:''}
   ${dom?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono / WhatsApp" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">
   <input class="f" placeholder="Dirección (barrio, calle, referencias)" maxlength="200" value="${esc(form.address)}" oninput="fld('address',this.value)">
   ${pays.length?`<div class="lbl">Forma de pago</div><select class="f" onchange="fld('pay',this.value)">${pays.map(p=>`<option ${p===form.pay?'selected':''}>${esc(p)}</option>`).join('')}</select>`:''}`:''}
@@ -266,8 +270,7 @@ function render(keepFocus){
   items.forEach(i=>{if(!cats.includes(i.cat))cats.push(i.cat)});
   const tables=(C&&C.tables)||[];
   const head=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1>${themeBtn()}${C&&C.slogan?`<p>${esc(C.slogan)}</p>`:''}
-   ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🍽️ Estoy en el local</button></div>
-   ${type==='mesa'?`<select class="f" onchange="setTable(this.value)" aria-label="Mesa"><option value="">Elige tu mesa…</option>${tables.map(t=>`<option ${t===table?'selected':''}>${esc(t)}</option>`).join('')}</select>`:''}`}
+   ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🏪 Paso a recoger</button></div>`}
    </header>`;
   const closed=!isOpen()?`<div class="msg">😴 Por ahora no estamos recibiendo pedidos por este medio. ${esc((C&&C.closedMsg)||'')}</div>`:'';
   catList=cats;if(!catSel||!cats.includes(catSel))catSel=cats[0]||null;
