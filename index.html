@@ -90,7 +90,7 @@ let C=null, items=[], mods=[], loaded={c:false,i:false};
 const PICK='Para recoger';
 let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'';
 let cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
-let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:''};
+let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:'',domPay:''};
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},e=>{loaded.c=true;err='No se pudo cargar el menú.';render()});
 onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},e=>{loaded.i=true;err='No se pudo cargar el menú.';render()});
@@ -163,6 +163,10 @@ window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);
   if(d>0&&it&&it.stock!=null&&qtyOf(l.id)>=it.stock){toast('Solo quedan '+it.stock);return}
   l.qty+=d;if(l.qty<=0)cart.splice(i,1);if(!cart.length)cartOpen=false;render(true)};
 window.fld=(k,v)=>{form[k]=v};
+const isTr=()=>type==='domicilio'&&/transfer/i.test(form.pay||'');
+const payTxt=()=>{const p=form.pay||(C&&C.pays&&C.pays[0])||'';return isTr()&&form.domPay?p+(form.domPay==='recibir'?' · domicilio al recibir':' · domicilio incluido'):p};
+window.setPay=v=>{form.pay=v;render(true)};
+window.setDomPay=v=>{form.domPay=v;render(true)};
 window.reset=()=>{lastWa='';if(unsub){unsub();unsub=null}cart=[];orderId=null;orderSt='new';form.note='';cartOpen=false;render()};
 
 const isOpen=()=>!C||C.open!==false;
@@ -172,7 +176,7 @@ function waDigits(){let d=String((C&&C.wa)||WA_FIJO||'').replace(/\D/g,'');if(d.
 function waUrl(num,id,name,phone,address){
   const L=[],dom=type==='domicilio';L.push(dom?'*Nuevo pedido a domicilio* #'+id.slice(-4).toUpperCase():'*Nuevo pedido · '+(table||'Mesa')+'* #'+id.slice(-4).toUpperCase());
   if(name)L.push('Cliente: '+name);if(dom){L.push('Teléfono: '+phone);if(zone)L.push('Zona: '+zone);L.push('Dirección: '+address);
-  const pay=form.pay||(C&&C.pays&&C.pays[0])||'';if(pay)L.push('Pago: '+pay)}
+  const pay=payTxt();if(pay)L.push('Pago: '+pay)}
   L.push('');cart.forEach(l=>L.push(l.qty+'x '+l.name+(l.mods.length?' ('+l.mods.join(', ')+')':'')+' - '+fmt(l.price*l.qty)));
   L.push('');L.push('Subtotal: '+fmt(sub()));if(fee())L.push('Domicilio'+(zone?' ('+zone+')':'')+': '+fmt(fee()));
   L.push('*Total: '+fmt(sub()+fee())+'*');if(form.note.trim())L.push('Notas: '+form.note.trim());
@@ -189,6 +193,7 @@ window.send=async()=>{
     if(zones().length&&!zones().some(x=>x.n===zone)){err='Elige a qué zona va tu domicilio.';return render(true)}
     if(!name||!phone||!address){err='Para domicilio necesitamos tu nombre, teléfono y dirección.';return render(true)}
     if(phone.replace(/\D/g,'').length<7){err='Revisa tu número de teléfono.';return render(true)}
+    if(isTr()&&!form.domPay){err='Indica si pagas el domicilio al recibir o va incluido en la transferencia.';return render(true)}
   }
   const waNum=type==='domicilio'?waDigits():'';
   sending=true;render(true);
@@ -196,7 +201,7 @@ window.send=async()=>{
   try{
     const ref=await addDoc(collection(db,'orders'),{
       type,table:(type==='mesa'?table:(type==='domicilio'?zone:'')).slice(0,40),name:name.slice(0,80),phone:phone.slice(0,30),address:address.slice(0,200),
-      note:form.note.trim().slice(0,300),pay:(type==='domicilio'?form.pay||(C&&C.pays&&C.pays[0])||'':'').slice(0,40),fee:fee(),
+      note:form.note.trim().slice(0,300),pay:(type==='domicilio'?payTxt():'').slice(0,40),fee:fee(),
       lines:cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''})),
       total,status:'new',createdAt:serverTimestamp()
     });
@@ -234,11 +239,13 @@ function cartSheet(){
   ${!dom&&table===PICK?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono (opcional)" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">`:''}
   ${dom?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono / WhatsApp" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">
   <input class="f" placeholder="Dirección (barrio, calle, referencias)" maxlength="200" value="${esc(form.address)}" oninput="fld('address',this.value)">
-  ${pays.length?`<div class="lbl">Forma de pago</div><select class="f" onchange="fld('pay',this.value)">${pays.map(p=>`<option ${p===form.pay?'selected':''}>${esc(p)}</option>`).join('')}</select>`:''}`:''}
+  ${pays.length?`<div class="lbl">Forma de pago</div><select class="f" onchange="setPay(this.value)">${pays.map(p=>`<option ${p===form.pay?'selected':''}>${esc(p)}</option>`).join('')}</select>`:''}
+  ${isTr()?`<div class="lbl">¿Cómo pagas el domicilio?</div><button class="mch${form.domPay==='recibir'?' on':''}" onclick="setDomPay('recibir')">Lo pago al recibir<small>Pago el domicilio en efectivo al domiciliario</small></button><button class="mch${form.domPay==='incluido'?' on':''}" onclick="setDomPay('incluido')">Va incluido en la transferencia<small>Transfiero productos + domicilio</small></button>`:''}`:''}
   <div class="lbl">Notas del pedido</div><textarea class="f" rows="2" maxlength="300" placeholder="Algo más que debamos saber" oninput="fld('note',this.value)">${esc(form.note)}</textarea>
   <div class="sec" style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(sub())}</span></div>
   ${dom&&zones().length&&!zone?`<div class="sec">Elige la zona para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
+  ${isTr()&&form.domPay==='recibir'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
   <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button>`}</div></div>`;
 }
