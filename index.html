@@ -71,6 +71,8 @@ function toggleTheme(){var n=isDark()?'light':'dark';document.documentElement.se
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getFirestore,collection,doc,addDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+async function addOrder(data){const r=await addDoc(collection(db,'orders'),data);try{fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id}),keepalive:true}).catch(()=>{})}catch(e){}return r}
 import * as CONF from "./firebase-config.js";
 const FIREBASE_CONFIG=CONF.FIREBASE_CONFIG,WA_FIJO=String(CONF.WHATSAPP||'');
 
@@ -199,7 +201,7 @@ window.send=async()=>{
   sending=true;render(true);
   const total=sub()+fee();
   try{
-    const ref=await addDoc(collection(db,'orders'),{
+    const ref=await addOrder({
       type,table:(type==='mesa'?table:(type==='domicilio'?zone:'')).slice(0,40),name:name.slice(0,80),phone:phone.slice(0,30),address:address.slice(0,200),
       note:form.note.trim().slice(0,300),pay:(type==='domicilio'?payTxt():'').slice(0,40),fee:fee(),
       lines:cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''})),
@@ -245,7 +247,7 @@ function cartSheet(){
   <div class="sec" style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(sub())}</span></div>
   ${dom&&zones().length&&!zone?`<div class="sec">Elige la zona para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
-  ${isTr()&&form.domPay==='recibir'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
+  ${type==='domicilio'&&/^\s*efectivo/i.test(form.pay||'')&&fee()?`<div class="sec" style="margin:-6px 0 8px">El domicilio (${fmt(fee())}) se lo pagas en efectivo al domiciliario al recibir.</div>`:''}${isTr()&&form.domPay==='recibir'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
   <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button>`}</div></div>`;
 }

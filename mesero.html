@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1D2230"><meta name="robots" content="noindex,nofollow">
-<title>Meseras</title><link rel="icon" href="data:,">
+<title>Meseras</title><link rel="manifest" href="manifest-mesero.webmanifest"><link rel="apple-touch-icon" href="icon-mesero-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Meseras"><link rel="icon" href="data:,">
 <style>
 :root{--ink:#1D2230;--g:#CC441B;--bg:#fff;--tx:#1B1F27;--mu:#6B7280;--ln:#E4E8EE;--sf:#F1F3F7;--ok:#1F9D63;--okbg:#DDF3E8;--wr:#FFF1D6;color-scheme:light dark}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}}
@@ -83,6 +83,8 @@ function toggleTheme(){var n=isDark()?'light':'dark';document.documentElement.se
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {getFirestore,collection,doc,addDoc,onSnapshot,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+async function addOrder(data){const r=await addDoc(collection(db,'orders'),data);try{fetch('/api/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:r.id}),keepalive:true}).catch(()=>{})}catch(e){}return r}
 import * as CONF from "./firebase-config.js";
 const FIREBASE_CONFIG=CONF.FIREBASE_CONFIG;
 const $=s=>document.querySelector(s);
@@ -137,7 +139,7 @@ window.removeLine=async (i,q)=>{q=q||1;
   if(!waiter.trim()){toast('Escribe tu nombre en la lista de mesas');return}
   if(!confirm('¿Quitar '+q+' '+l.n+' de '+table+'? Se avisará a cocina.'))return;
   remBusy=true;
-  try{await addDoc(collection(db,'orders'),{type:'mesa',table,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});toast('✏️ Cambio enviado a cocina',true)}
+  try{await addOrder({type:'mesa',table,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});toast('✏️ Cambio enviado a cocina',true)}
   catch(e){toast('No se pudo enviar el cambio')}
   remBusy=false;
 };
@@ -185,8 +187,8 @@ async function applyAcct(opts){
   if(remBusy)return;remBusy=true;
   const price=it.price+opts.reduce((x,o)=>x+(+o.p||0),0),q=a.q,tb=table;pick=null;render();
   try{
-    await addDoc(collection(db,'orders'),{type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});
-    const ref=await addDoc(collection(db,'orders'),{type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:('CAMBIO: '+it.name+(nm.length?' → '+nm.join(', '):'')).slice(0,300),pay:'mesera',fee:0,lines:[{id:it.id,name:it.name,qty:q,price,mods:nm,cat:it.cat||''}],total:price*q,status:'new',createdAt:serverTimestamp()});
+    await addOrder({type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});
+    const ref=await addOrder({type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:('CAMBIO: '+it.name+(nm.length?' → '+nm.join(', '):'')).slice(0,300),pay:'mesera',fee:0,lines:[{id:it.id,name:it.name,qty:q,price,mods:nm,cat:it.cat||''}],total:price*q,status:'new',createdAt:serverTimestamp()});
     watchOrder(ref,tb);toast('✏️ Cambio enviado a cocina',true);
   }catch(e){toast('No se pudo enviar el cambio')}
   remBusy=false;
@@ -198,7 +200,7 @@ window.send=async()=>{
   sending=true;render(true);
   const tb=table,lines=cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''}));
   try{
-    const ref=await addDoc(collection(db,'orders'),{type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:note.trim().slice(0,300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
+    const ref=await addOrder({type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:note.trim().slice(0,300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
     toast('✅ Enviado a cocina · '+tb,true);
     cart=[];carts[tb]=[];note='';cartOpen=false;sending=false;view='tables';table=null;
     sent[tb]=Date.now();
@@ -270,4 +272,5 @@ function render(keep){
   const s2=document.querySelector('.sh');if(s2&&st)s2.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
+try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw-mesero.js').catch(()=>{})}catch(e){}
 </script></body></html>
