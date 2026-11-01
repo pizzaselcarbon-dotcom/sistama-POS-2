@@ -2,7 +2,7 @@
 <html lang="es"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#1D2230"><meta name="robots" content="noindex,nofollow">
-<title>Meseras</title><link rel="manifest" href="manifest-mesero.webmanifest"><link rel="apple-touch-icon" href="icon-mesero-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Meseras"><link rel="icon" href="data:,">
+<title>Meser@s</title><link rel="manifest" href="manifest-mesero.webmanifest"><link rel="apple-touch-icon" href="icon-mesero-192.png"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="Meser@s"><link rel="icon" href="data:,">
 <style>
 :root{--ink:#1D2230;--g:#CC441B;--bg:#fff;--tx:#1B1F27;--mu:#6B7280;--ln:#E4E8EE;--sf:#F1F3F7;--ok:#1F9D63;--okbg:#DDF3E8;--wr:#FFF1D6;color-scheme:light dark}
 @media (prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#14171C;--tx:#ECEFF4;--mu:#98A1B0;--ln:#262B34;--sf:#1D2129;--okbg:#173B2B;--wr:#3A2C10}}
@@ -98,7 +98,7 @@ const db=getFirestore(initializeApp(FIREBASE_CONFIG));
 let C=null,items=[],mods=[],ST={},loaded={c:false,i:false};
 let view='tables',table=null,cart=[],carts={},ready={},sent={};
 let catSel=null,catList=[],pick=null,cartOpen=false,sending=false,err='';
-let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1';
+let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1',nameOk=SS.get('w_named')==='1'&&!!(LS.get('w_name')||'').trim();
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},()=>{loaded.c=true;render()});
 onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},()=>{loaded.i=true;render()});
@@ -127,6 +127,7 @@ function addLine(it,opts){
 
 window.checkPin=async()=>{const v=($('#pin')||{}).value||'';try{if(await sha(v.trim())===C.mpin){SS.set('w_pin','1');pinOk=true;render()}else{$('#pe').textContent='PIN incorrecto';}}catch(e){$('#pe').textContent='Este navegador no permite verificar el PIN'}};
 window.setName=v=>{waiter=v;LS.set('w_name',v)};
+window.confirmName=()=>{const v=(($('#wname')||{}).value||'').trim();if(v.length<2){const e=$('#we');if(e)e.textContent='Escribe tu nombre (mínimo 2 letras)';return}setName(v.slice(0,40));SS.set('w_named','1');nameOk=true;render()};
 window.openTable=name=>{
   if(table)carts[table]=cart;
   table=name;cart=carts[name]||[];view=(ST[name]&&ST[name].n>0&&!cart.length)?'acct':'order';catSel=null;delete ready[name];err='';window.scrollTo(0,0);render();
@@ -136,7 +137,7 @@ window.goAcct=()=>{view='acct';window.scrollTo(0,0);render()};
 let remBusy=false;
 window.removeLine=async (i,q)=>{q=q||1;
   const l=((ST[table]||{}).l||[])[i];if(!l||remBusy)return;
-  if(!waiter.trim()){toast('Escribe tu nombre en la lista de mesas');return}
+  if(!waiter.trim()){toast('Escribe tu nombre');return}
   if(!confirm('¿Quitar '+q+' '+l.n+' de '+table+'? Se avisará a cocina.'))return;
   remBusy=true;
   try{await addOrder({type:'mesa',table,name:waiter.trim().slice(0,80),phone:'',address:'',note:'',pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m||[],cat:''}],total:0,status:'new',createdAt:serverTimestamp()});toast('✏️ Cambio enviado a cocina',true)}
@@ -183,7 +184,7 @@ async function applyAcct(opts){
   const a=pick.acct,l=((ST[table]||{}).l||[])[a.i],it=pick.it;if(!l){pick=null;return render()}
   const nm=opts.map(o=>o.n);
   if(JSON.stringify(nm)===JSON.stringify(l.m||[])){pick=null;return render()}
-  if(!waiter.trim()){toast('Escribe tu nombre en la lista de mesas');return}
+  if(!waiter.trim()){toast('Escribe tu nombre');return}
   if(remBusy)return;remBusy=true;
   const price=it.price+opts.reduce((x,o)=>x+(+o.p||0),0),q=a.q,tb=table;pick=null;render();
   try{
@@ -235,19 +236,19 @@ function cartSheet(){
 function render(keep){
   const el=$('#app');if(!loaded.c||!loaded.i)return;
   const ae=document.activeElement,aid=ae&&ae.id,sh=document.querySelector('.sh'),st=sh?sh.scrollTop:0;
-  document.title=((C&&C.biz)||'Meseras')+' · Meseras';
-  if(C&&C.mpin&&!pinOk){el.innerHTML=`<div class="pin"><h2>${esc(C.biz||'Meseras')}</h2><p class="sec">Escribe el PIN de meseras</p><input class="f" id="pin" type="password" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()"><p id="pe" class="sec" style="color:#c0392b"></p><button class="big" onclick="checkPin()">Entrar</button></div>`;return}
+  document.title=((C&&C.biz)||'Meser@s')+' · Meser@s';
+  if(C&&C.mpin&&!pinOk){el.innerHTML=`<div class="pin"><h2>${esc(C.biz||'Meser@s')}</h2><p class="sec">Escribe el PIN de meser@s</p><input class="f" id="pin" type="password" inputmode="numeric" autocomplete="off" onkeydown="if(event.key==='Enter')checkPin()"><p id="pe" class="sec" style="color:#c0392b"></p><button class="big" onclick="checkPin()">Entrar</button></div>`;return}
+  if(!nameOk){el.innerHTML=`<div class="pin"><h2>${esc((C&&C.biz)||'Meser@s')}</h2><p class="sec">¿Cómo te llamas?</p><input class="f" id="wname" maxlength="40" autocomplete="off" placeholder="Tu nombre" value="${esc(waiter)}" style="letter-spacing:normal;font-size:20px" onkeydown="if(event.key==='Enter')confirmName()"><p id="we" class="sec" style="color:#c0392b;min-height:20px"></p><button class="big" onclick="confirmName()">Continuar</button></div>`;const wn=$('#wname');if(wn&&!waiter)wn.focus();return}
   if(!items.length){el.innerHTML='<p style="padding:40px 16px;color:var(--mu)">El menú aún no está publicado desde el POS.</p>';return}
   if(view==='tables'){
     const tables=(C&&C.tables)||[];
-    el.innerHTML=`<div class="topbar"><h1>🧑‍🍳 Meseras · ${esc((C&&C.biz)||'')}</h1>${themeBtn()}</div>
-    <div class="who"><div class="lbl" style="margin-top:0">Mesera</div><input class="f" id="wn" placeholder="Tu nombre" maxlength="40" value="${esc(waiter)}" oninput="setName(this.value)"></div>
+    el.innerHTML=`<div class="topbar"><h1>🧑‍🍳 Meser@s · ${esc((C&&C.biz)||'')}</h1>${themeBtn()}</div>
+    <div class="who"><div class="lbl" style="margin-top:0">Meser@</div><input class="f" id="wn" placeholder="Tu nombre" maxlength="40" value="${esc(waiter)}" oninput="setName(this.value)"></div>
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}
-    <p class="sec" style="padding:0 16px 20px">Meseras v15 · ${items.length} productos · ${items.filter(i=>(i.mods||[]).length).length} con modificadores · ${mods.length} grupos de modificadores</p>
-    <p class="sec" style="padding:0 16px 20px">${(()=>{const cs={};items.forEach(i=>{const n=modGroups(i).length;(cs[i.cat]=cs[i.cat]||{t:0,m:0}).t++;if(n)cs[i.cat].m++});return Object.keys(cs).map(c=>esc(c)+': '+cs[c].m+'/'+cs[c].t).join(' · ')})()} <br>(categoría: productos con modificadores / total)</p>`;
+    `;
     return;
   }
   if(view==='acct'){
