@@ -49,6 +49,13 @@ header.top select.f{margin:10px 0 0}
 .ov{position:fixed;inset:0;background:rgba(10,12,18,.55);z-index:20;display:flex;align-items:flex-end;justify-content:center}
 .sh{background:var(--bg);width:100%;max-width:640px;max-height:92vh;overflow:auto;padding:16px 16px calc(16px + env(safe-area-inset-bottom));border-radius:18px 18px 0 0}
 .sh h3{margin:0 0 4px}.lbl{font-size:13px;font-weight:700;color:var(--mu);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 4px}
+.ov.ask{align-items:center;z-index:30;padding:16px}
+.dlg{position:relative;background:var(--bg);width:100%;max-width:380px;border-radius:18px;padding:18px 16px 16px}
+.dlg h3{margin:0 28px 12px 0}
+.dlg .x{position:absolute;top:10px;right:10px}
+.opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-bottom:10px;padding:14px;border-radius:14px;border:2px solid var(--ln);background:var(--sf);color:var(--tx);font-size:16px}
+.opt:active,.opt:hover{border-color:var(--g)}
+.opt .oi{font-size:28px}.opt small{display:block;color:var(--mu);font-size:13px;margin-top:2px}
 .mch{display:inline-flex;flex-direction:column;align-items:flex-start;margin:0 8px 8px 0;padding:9px 13px;border-radius:12px;border:1px solid var(--ln);background:var(--sf);color:var(--tx)}
 .mch small{color:var(--mu)}.mch.on{border-color:var(--g);background:var(--g);color:#fff}.mch.on small{color:#fff}.mch:disabled{opacity:.4}
 .ln{display:flex;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--ln)}
@@ -91,7 +98,7 @@ const mesaQR=(P.get('mesa')||'').slice(0,40);
 let C=null, items=[], mods=[], loaded={c:false,i:false};
 const PICK='Para recoger';
 let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'';
-let cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
+let askT=false, cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:'',domPay:''};
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},e=>{loaded.c=true;err='No se pudo cargar el menú.';render()});
@@ -157,10 +164,12 @@ window.pickOk=()=>{
   addLine(pick.it,opts);pick=null;render();
 };
 window.closePick=()=>{pick=null;render()};
-window.openCart=()=>{cartOpen=true;cstep=1;err='';render()};
-window.cNext=()=>{if(!cart.length)return;cstep=2;err='';render();const sh=document.querySelector('.sh');if(sh)sh.scrollTop=0};
+window.openCart=()=>{cartOpen=true;cstep=1;askT=false;err='';render()};
+window.cNext=()=>{if(!cart.length)return;if(!mesaQR){askT=true;render();return}cstep=2;err='';render();const sh=document.querySelector('.sh');if(sh)sh.scrollTop=0};
 window.cBack=()=>{cstep=1;err='';render()};
-window.closeCart=()=>{cartOpen=false;render()};
+window.closeCart=()=>{cartOpen=false;askT=false;render()};
+window.pickT=t=>{askT=false;type=t;table=(t==='domicilio')?'':(mesaQR||PICK);cstep=2;err='';render();const sh=document.querySelector('.sh');if(sh)sh.scrollTop=0};
+window.closeAsk=()=>{askT=false;render()};
 window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);
   if(d>0&&it&&it.stock!=null&&qtyOf(l.id)>=it.stock){toast('Solo quedan '+it.stock);return}
   l.qty+=d;if(l.qty<=0)cart.splice(i,1);if(!cart.length)cartOpen=false;render(true)};
@@ -225,6 +234,13 @@ function pickSheet(){
   <button class="big" onclick="pickOk()">${p.ed!=null?'Guardar cambios':'Agregar'} ${fmt(price)}</button></div></div>`;
 }
 
+function askSheet(){
+  return `<div class="ov ask" onclick="if(event.target===this)closeAsk()"><div class="dlg" role="dialog" aria-label="Tipo de pedido">
+  <button class="x" onclick="closeAsk()" aria-label="Cerrar">✕</button><h3>¿Cómo quieres tu pedido?</h3>
+  <button class="opt" onclick="pickT('domicilio')"><span class="oi">🛵</span><span><b>Domicilio</b><small>Te lo llevamos a tu dirección</small></span></button>
+  <button class="opt" onclick="pickT('mesa')"><span class="oi">🏪</span><span><b>Paso a recoger</b><small>Lo recoges en el local</small></span></button></div></div>`;
+}
+
 function cartSheet(){
   const pays=(C&&C.pays)||[];if(!form.pay)form.pay=pays[0]||'';
   const dom=type==='domicilio';
@@ -249,7 +265,7 @@ function cartSheet(){
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
   ${type==='domicilio'&&/^\s*efectivo/i.test(form.pay||'')&&fee()?`<div class="sec" style="margin:-6px 0 8px">El domicilio (${fmt(fee())}) se lo pagas en efectivo al domiciliario al recibir.</div>`:''}${isTr()&&form.domPay==='recibir'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
-  <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button>`}</div></div>`;
+  <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button>`}</div></div>${askT?askSheet():''}`;
 }
 
 function doneView(){
