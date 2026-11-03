@@ -97,7 +97,7 @@ const P=new URLSearchParams(location.search);
 const mesaQR=(P.get('mesa')||'').slice(0,40);
 let C=null, items=[], mods=[], loaded={c:false,i:false};
 const PICK='Para recoger';
-let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'';
+let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'', zq=zone;
 let askT=false, cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:'',domPay:''};
 
@@ -123,7 +123,12 @@ function toast(m){const d=document.createElement('div');d.textContent=m;d.style.
 
 window.setType=t=>{type=t;table=(t==='domicilio')?'':(mesaQR||PICK);render()};
 window.setTable=v=>{table=v;render()};
-window.setZone=v=>{zone=v;LS.set('m_zone',v);render(true)};
+const nz=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\s+/g,' ').trim();
+const zSug=()=>{const q=nz(zq);if(!q||zone)return '';const m=zones().filter(z=>nz(z.n).includes(q)).slice(0,6);
+  return m.length?m.map(z=>`<button type="button" class="mch" style="width:100%;margin:0 0 6px;flex-direction:row;justify-content:space-between;align-items:center" onclick="pickZ(${JSON.stringify(z.n).replace(/"/g,'&quot;')})"><b>${esc(z.n)}</b><small>${fmt(z.p)}</small></button>`).join(''):`<div class="sec">No encontramos ese barrio en nuestra zona de domicilios. Revisa cómo lo escribiste o comunícate con el local.</div>`};
+window.setZq=v=>{zq=v;const m=zones().find(z=>nz(z.n)===nz(v)),nzn=m?m.n:'';const ch=nzn!==zone;zone=nzn;LS.set('m_zone',zone);if(ch)render(true);else{const e=document.getElementById('zsug');if(e)e.innerHTML=zSug()}};
+window.pickZ=n=>{zq=n;zone=n;LS.set('m_zone',n);render(true)};
+window.setZone=window.pickZ;
 let catSel=null,catList=[];
 window.openCat=i=>{catSel=catList[i]||null;window.scrollTo(0,0);render()};
 const ICONS=[[/pizza/,'🍕'],[/hambur/,'🍔'],[/perro|hot ?dog/,'🌭'],[/salchi/,'🍟'],[/picada|choripollo/,'🍽️'],[/gaseosa|bebida|refresco/,'🥤'],[/jugo/,'🧃'],[/cerveza/,'🍺'],[/postre|helado/,'🍨'],[/sandwich|sándwich/,'🥪'],[/pollo|asado/,'🍗'],[/desayuno/,'🍳'],[/ensalada/,'🥗'],[/adicional|extra/,'➕']];
@@ -201,7 +206,7 @@ window.send=async()=>{
   if(type==='mesa'&&!table){err='Falta la mesa. Escanea de nuevo el QR de tu mesa.';return render(true)}
   if(rec&&!name){err='Escribe tu nombre para avisarte cuando esté listo.';return render(true)}
   if(type==='domicilio'){
-    if(zones().length&&!zones().some(x=>x.n===zone)){err='Elige a qué zona va tu domicilio.';return render(true)}
+    if(zones().length&&!zones().some(x=>x.n===zone)){err='Escribe tu barrio y elígelo de la lista para calcular el domicilio.';return render(true)}
     if(!name||!phone||!address){err='Para domicilio necesitamos tu nombre, teléfono y dirección.';return render(true)}
     if(phone.replace(/\D/g,'').length<7){err='Revisa tu número de teléfono.';return render(true)}
     if(isTr()&&!form.domPay){err='Indica si pagas el domicilio al recibir o va incluido en la transferencia.';return render(true)}
@@ -253,7 +258,7 @@ function cartSheet(){
   ${cstep===1?`<div class="tot"><span>Subtotal</span><span>${fmt(sub())}</span></div>${dom?'<div class="sec">El costo del domicilio se calcula en el siguiente paso.</div>':''}<button class="big" style="margin-top:12px" onclick="cNext()">Seguir con el pedido →</button>`:`
   <div class="lbl">${dom||table===PICK?'Tus datos':'Tu nombre (opcional)'}</div>
   <input class="f" placeholder="Nombre${dom||table===PICK?'':' (opcional)'}" maxlength="80" value="${esc(form.name)}" oninput="fld('name',this.value)">
-  ${dom&&zones().length?`<div class="lbl">¿A dónde enviamos?</div><select class="f" onchange="setZone(this.value)" aria-label="Zona de entrega"><option value="">Elige la zona…</option>${zones().map(z=>`<option value="${esc(z.n)}" ${z.n===zone?'selected':''}>${esc(z.n)} · ${fmt(z.p)}</option>`).join('')}</select>`:''}
+  ${dom&&zones().length?`<div class="lbl">¿A dónde enviamos?</div><input class="f" id="zq" autocomplete="off" autocapitalize="words" placeholder="Escribe tu barrio" value="${esc(zq)}" oninput="setZq(this.value)" aria-label="Barrio de entrega">${zone&&fee()?`<div class="sec" style="color:var(--g);font-weight:600">✅ ${esc(zone)} · Domicilio: ${fmt(fee())}</div>`:''}<div id="zsug">${zSug()}</div>`:''}
   ${!dom&&table===PICK?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono (opcional)" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">`:''}
   ${dom?`<input class="f" type="tel" inputmode="tel" placeholder="Teléfono / WhatsApp" maxlength="30" value="${esc(form.phone)}" oninput="fld('phone',this.value)">
   <input class="f" placeholder="Dirección (barrio, calle, referencias)" maxlength="200" value="${esc(form.address)}" oninput="fld('address',this.value)">
@@ -261,7 +266,7 @@ function cartSheet(){
   ${isTr()?`<div class="lbl">¿Cómo pagas el domicilio?</div><button class="mch${form.domPay==='recibir'?' on':''}" onclick="setDomPay('recibir')">Lo pago al recibir<small>Pago el domicilio en efectivo al domiciliario</small></button><button class="mch${form.domPay==='incluido'?' on':''}" onclick="setDomPay('incluido')">Va incluido en la transferencia<small>Transfiero productos + domicilio</small></button>`:''}`:''}
   <div class="lbl">Notas del pedido</div><textarea class="f" rows="2" maxlength="300" placeholder="Algo más que debamos saber" oninput="fld('note',this.value)">${esc(form.note)}</textarea>
   <div class="sec" style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(sub())}</span></div>
-  ${dom&&zones().length&&!zone?`<div class="sec">Elige la zona para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
+  ${dom&&zones().length&&!zone?`<div class="sec">Escribe tu barrio para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
   ${type==='domicilio'&&/^\s*efectivo/i.test(form.pay||'')&&fee()?`<div class="sec" style="margin:-6px 0 8px">El domicilio (${fmt(fee())}) se lo pagas en efectivo al domiciliario al recibir.</div>`:''}${isTr()&&form.domPay==='recibir'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
