@@ -56,6 +56,7 @@ header.top select.f{margin:10px 0 0}
 .opt{display:flex;align-items:center;gap:12px;width:100%;text-align:left;margin-bottom:10px;padding:14px;border-radius:14px;border:2px solid var(--ln);background:var(--sf);color:var(--tx);font-size:16px}
 .opt:active,.opt:hover{border-color:var(--g)}
 .opt .oi{font-size:28px}.opt small{display:block;color:var(--mu);font-size:13px;margin-top:2px}
+.nh{margin:2px 0 12px;padding:12px 14px;border-radius:12px;background:var(--sf);border:2px solid var(--g);font-size:17px;line-height:1.4;font-weight:600;color:var(--tx)}.nh b{color:var(--g);font-size:19px}
 .trbox{margin:0 0 12px;padding:12px 14px;border-radius:12px;border:1px solid var(--g);background:var(--sf);font-size:15px}.trbox div{margin-top:6px;white-space:pre-line;user-select:all;-webkit-user-select:all}
 .mch{display:inline-flex;flex-direction:column;align-items:flex-start;margin:0 8px 8px 0;padding:9px 13px;border-radius:12px;border:1px solid var(--ln);background:var(--sf);color:var(--tx)}
 .mch small{color:var(--mu)}.mch.on{border-color:var(--g);background:var(--g);color:#fff}.mch.on small{color:#fff}.mch:disabled{opacity:.4}
@@ -269,7 +270,7 @@ function cartSheet(){
   <div class="sec" style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${fmt(sub())}</span></div>
   ${dom&&zones().length&&!zone?`<div class="sec">Escribe tu barrio para ver el costo del domicilio.</div>`:''}${fee()?`<div class="sec" style="display:flex;justify-content:space-between"><span>Domicilio${zone?' · '+esc(zone):''}</span><span>${fmt(fee())}</span></div>`:''}
   <div class="tot"><span>Total</span><span>${fmt(sub()+fee())}</span></div>
-  ${type==='domicilio'&&/^\s*efectivo/i.test(form.pay||'')&&fee()?`<div class="sec" style="margin:-6px 0 8px">El domicilio (${fmt(fee())}) se lo pagas en efectivo al domiciliario al recibir.</div>`:''}${isTr()&&form.domPay==='recibir'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="sec" style="margin:-6px 0 8px">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
+  ${type==='domicilio'&&/^\s*efectivo/i.test(form.pay||'')&&fee()?`<div class="nh">El domicilio (${fmt(fee())}) se lo pagas en efectivo al domiciliario al recibir.</div>`:''}${isTr()&&form.domPay==='recibir'&&fee()?`<div class="nh">Transfieres <b>${fmt(sub())}</b> ahora y pagas el domicilio (${fmt(fee())}) al recibir.</div>`:''}${isTr()&&form.domPay==='incluido'&&fee()?`<div class="nh">Transfieres <b>${fmt(sub()+fee())}</b> (productos + domicilio).</div>`:''}
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
   <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'Enviar pedido'}</button>`}</div></div>${askT?askSheet():''}`;
 }
