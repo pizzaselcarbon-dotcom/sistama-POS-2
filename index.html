@@ -192,8 +192,8 @@ const isOpen=()=>!C||C.open!==false;
 let lastWa='';
 function waDigits(){let d=String((C&&C.wa)||WA_FIJO||'').replace(/\D/g,'');if(d.length===10&&d[0]==='3')d='57'+d;return d}
 function waUrl(num,id,name,phone,address){
-  const L=[],dom=type==='domicilio';L.push(dom?'*Nuevo pedido a domicilio* #'+id.slice(-4).toUpperCase():'*Nuevo pedido · '+(table||'Mesa')+'* #'+id.slice(-4).toUpperCase());
-  if(name)L.push('Cliente: '+name);if(dom){L.push('Teléfono: '+phone);if(zone)L.push('Zona: '+zone);L.push('Dirección: '+address);
+  const L=[],dom=type==='domicilio';const pk=!dom&&table===PICK;L.push(dom?'*Nuevo pedido a domicilio* #'+id.slice(-4).toUpperCase():pk?'*Nuevo pedido para recoger* #'+id.slice(-4).toUpperCase():'*Nuevo pedido · '+(table||'Mesa')+'* #'+id.slice(-4).toUpperCase());
+  if(name)L.push('Cliente: '+name);if(pk&&phone)L.push('Teléfono: '+phone);if(dom){L.push('Teléfono: '+phone);if(zone)L.push('Zona: '+zone);L.push('Dirección: '+address);
   const pay=payTxt();if(pay)L.push('Pago: '+pay)}
   L.push('');cart.forEach(l=>L.push(l.qty+'x '+l.name+(l.mods.length?' ('+l.mods.join(', ')+')':'')+' - '+fmt(l.price*l.qty)));
   L.push('');L.push('Subtotal: '+fmt(sub()));if(fee())L.push('Domicilio'+(zone?' ('+zone+')':'')+': '+fmt(fee()));
@@ -213,7 +213,7 @@ window.send=async()=>{
     if(phone.replace(/\D/g,'').length<7){err='Revisa tu número de teléfono.';return render(true)}
     if(isTr()&&!form.domPay){err='Indica si pagas el domicilio al recibir o va incluido en la transferencia.';return render(true)}
   }
-  const waNum=type==='domicilio'?waDigits():'';
+  const waNum=(type==='domicilio'||(type==='mesa'&&table===PICK))?waDigits():'';
   sending=true;render(true);
   const total=sub()+fee();
   try{
