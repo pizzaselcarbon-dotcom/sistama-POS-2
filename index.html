@@ -57,6 +57,10 @@ header.top select.f{margin:10px 0 0}
 .opt:active,.opt:hover{border-color:var(--g)}
 .opt .oi{font-size:28px}.opt small{display:block;color:var(--mu);font-size:13px;margin-top:2px}
 .nh{margin:2px 0 12px;padding:12px 14px;border-radius:12px;background:var(--sf);border:2px solid var(--g);font-size:17px;line-height:1.4;font-weight:600;color:var(--tx)}.nh b{color:var(--g);font-size:19px}
+.wl{text-align:center;padding-top:22px}.wl h3{margin:6px 0 4px;font-size:21px}.wlh{font-size:42px;line-height:1}
+.wlm{margin:0 0 10px;color:var(--mu);font-size:15px}.wlt{margin:0 0 12px;font-size:15px}
+.wls{list-style:none;margin:0 0 16px;padding:0;text-align:left}.wls li{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px;font-size:15px;line-height:1.35}
+.wls li span{flex:0 0 28px;height:28px;border-radius:50%;background:var(--g);color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}
 .trbox{margin:0 0 12px;padding:12px 14px;border-radius:12px;border:1px solid var(--g);background:var(--sf);font-size:15px}.trbox div{margin-top:6px;white-space:pre-line;user-select:all;-webkit-user-select:all}
 .mch{display:inline-flex;flex-direction:column;align-items:flex-start;margin:0 8px 8px 0;padding:9px 13px;border-radius:12px;border:1px solid var(--ln);background:var(--sf);color:var(--tx)}
 .mch small{color:var(--mu)}.mch.on{border-color:var(--g);background:var(--g);color:#fff}.mch.on small{color:#fff}.mch:disabled{opacity:.4}
@@ -100,7 +104,7 @@ const mesaQR=(P.get('mesa')||'').slice(0,40);
 let C=null, items=[], mods=[], loaded={c:false,i:false};
 const PICK='Para recoger';
 let type=mesaQR?'mesa':'domicilio', table=mesaQR, zone=LS.get('m_zone')||'', zq=zone;
-let askT=false, cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
+let welcome=(()=>{try{return !!mesaQR&&!sessionStorage.getItem('m_wel_'+mesaQR)}catch(e){return !!mesaQR}})(), askT=false, cstep=1, cart=[], sheet=null, pick=null, cartOpen=false, sending=false, orderId=null, orderSt='new', unsub=null, err='';
 let form={name:LS.get('m_name')||'',phone:LS.get('m_phone')||'',address:LS.get('m_addr')||'',note:'',pay:'',domPay:''};
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},e=>{loaded.c=true;err='No se pudo cargar el menú.';render()});
@@ -176,6 +180,7 @@ window.cNext=()=>{if(!cart.length)return;if(!mesaQR){askT=true;render();return}c
 window.cBack=()=>{cstep=1;err='';render()};
 window.closeCart=()=>{cartOpen=false;askT=false;render()};
 window.pickT=t=>{askT=false;type=t;table=(t==='domicilio')?'':(mesaQR||PICK);cstep=2;err='';render();const sh=document.querySelector('.sh');if(sh)sh.scrollTop=0};
+window.closeWelcome=()=>{try{sessionStorage.setItem('m_wel_'+mesaQR,'1')}catch(e){}welcome=false;render()};
 window.closeAsk=()=>{askT=false;render()};
 window.chQty=(i,d)=>{const l=cart[i],it=items.find(x=>x.id===l.id);
   if(d>0&&it&&it.stock!=null&&qtyOf(l.id)>=it.stock){toast('Solo quedan '+it.stock);return}
@@ -239,6 +244,15 @@ function pickSheet(){
     return `<button class="mch${p.sel[k]?' on':''}" ${off?'disabled':''} onclick="pickTog('${k}')">${esc(o.n)}${o.p?`<small>+${fmt(o.p)}</small>`:''}${off?'<small>Agotado</small>':''}</button>`}).join('')}`).join('')}
   <div class="lbl">Comentario</div><input class="f" id="ptx" maxlength="80" placeholder="Ej: sin cebolla, bien cocida" value="${esc(p.txt)}" oninput="pickTxt(this.value)">
   <button class="big" onclick="pickOk()">${p.ed!=null?'Guardar cambios':'Agregar'} ${fmt(price)}</button></div></div>`;
+}
+
+function welcomeSheet(){
+  const biz='Comidas Rápidas el Carbón';
+  return `<div class="ov ask" onclick="if(event.target===this)closeWelcome()"><div class="dlg wl" role="dialog" aria-label="Bienvenida">
+  <div class="wlh">👋</div><h3>¡Bienvenido a ${biz}!</h3><p class="wlm">Estás en <b>${esc(mesaQR)}</b></p>
+  <p class="wlt">Desde este menú virtual puedes hacer tu pedido tú mismo:</p>
+  <ol class="wls"><li><span>1</span><div>Elige los productos que deseas y agrégalos con el botón <b>+</b></div></li><li><span>2</span><div>Revisa tu pedido y haz los cambios que quieras</div></li><li><span>3</span><div><b>Envíalo a cocina</b> y lo preparamos para llevártelo a tu mesa</div></li></ol>
+  <button class="big" onclick="closeWelcome()">Ver el menú</button></div></div>`;
 }
 
 function askSheet(){
@@ -317,7 +331,7 @@ function render(keepFocus){
   const body=`<div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(itemRow).join('')}</main></div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
   const dbg=P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v9\nWhatsApp: ${waDigits()||'NO CONFIGURADO'} ${(C&&C.wa)?'(desde el POS)':(WA_FIJO?'(fijo en el menú)':'')}\nZonas de domicilio: ${zones().length}\nOrden de categorías: ${(C&&C.catOrd)?'propio':'por defecto'}\nPedidos: ${isOpen()?'abiertos':'cerrados'}</pre>`:'';
-  el.innerHTML=head+closed+body+dbg+bar+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
+  el.innerHTML=head+closed+body+dbg+bar+(cartOpen?cartSheet():'')+(pick?pickSheet():'')+(welcome?welcomeSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
