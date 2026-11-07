@@ -34,7 +34,7 @@ function catalogText(cfg, items) {
   }).join('\n');
 }
 
-function systemPrompt(cfg, items, phone) {
+function systemPrompt(cfg, items, phone, base) {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
   const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const zones = (cfg.zones || []).filter(z => z.n);
@@ -56,12 +56,22 @@ Si el barrio no está en esta lista, di que una persona del equipo confirma cobe
 ${(cfg.pays || []).join(', ') || 'Efectivo, Transferencia'}
 ${cfg.trInfo ? 'Datos para transferir:\n' + cfg.trInfo : ''}
 
+${base ? `# PEDIDO ANTERIOR DE ESTE CLIENTE (ya confirmado en esta conversación)
+Cliente: ${base.name}${base.tipo === 'domicilio' ? ' (domicilio)' : ' (recoger)'}.
+Productos: ${base.summary}
+Estado: ${base.open ? 'EN PREPARACIÓN (todavía se puede agregar o cambiar algo)' : 'YA NO SE PUEDE MODIFICAR (está listo, ya salió o se cerró)'}.
+La conversación sigue abierta. Reglas para mensajes posteriores:
+- Si el cliente quiere AGREGAR algo y el pedido está en preparación: toma solo lo nuevo (con la misma regla de no repetir lo ya pedido), ofrécele lo que falte (bebida, adicionales) solo si es útil, y al final muestra un resumen corto SOLO de lo agregado y pide confirmación. Cuando confirme, responde «Listo, lo agregué a tu pedido.» y envía "order" con "tipo":"adicion" y solo las líneas nuevas (no pidas nombre, teléfono, dirección ni pago otra vez: ya los tienes).
+- Si quiere CAMBIAR o QUITAR algo del pedido anterior y está en preparación: confirma el cambio con una frase corta y envía "order" con "tipo":"cambio" y en "nota" la descripción exacta del cambio (con el nombre del producto afectado). Responde «Listo, avisamos a cocina del cambio.»
+- Si el pedido ya no se puede modificar: explica amablemente que ya salió o está listo y ofrécele hacer un pedido nuevo (se pide todo como un pedido nuevo, con "tipo":"domicilio" o "recoger", incluyendo solo lo del pedido nuevo).
+- Si el cliente quiere un pedido totalmente distinto, tómalo como pedido nuevo.
+` : ''}
 # FORMATO DE RESPUESTA (obligatorio)
 Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
 {"reply": "mensaje para el cliente", "order": null}
 - "reply" sigue todas las reglas de conversación y estilo anteriores (breve, una pregunta por mensaje).
 - "order" es null en todos los mensajes, EXCEPTO en el mensaje en que el cliente CONFIRMA el resumen final (dice sí, confirmo, dale, etc.). En ese mensaje "reply" debe ser solo "Pedido confirmado." y "order" lleva:
-{"tipo":"domicilio"|"recoger","nombre":"","telefono":"","direccion":"","barrio":"(exacto de la lista)","pago":"(uno de los medios de pago)","pago_domicilio":"recibir"|"incluido"|"","nota":"","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["nombres de opciones del catálogo"],"nota":"cambios libres, p. ej. sin cebolla","unidades_con_cambio":<opcional>}]}
+{"tipo":"domicilio"|"recoger"|"adicion"|"cambio","nombre":"","telefono":"","direccion":"","barrio":"(exacto de la lista)","pago":"(uno de los medios de pago)","pago_domicilio":"recibir"|"incluido"|"","nota":"","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["nombres de opciones del catálogo"],"nota":"cambios libres, p. ej. sin cebolla","unidades_con_cambio":<opcional>}]}
 - Los cambios como "sin cebolla" van en "opciones" si coinciden con una opción del catálogo; si no, en la "nota" de la línea.
 - "qty" es el total de unidades de ese producto. "opciones"/"nota" son el cambio. Si el cambio aplica solo a ALGUNAS unidades, pon en "unidades_con_cambio" cuántas lo llevan (ej.: 3 perros y 1 sin cebolla → qty 3, opciones ["Sin cebolla"], unidades_con_cambio 1). Si aplica a todas, omite "unidades_con_cambio". Si cada unidad lleva un cambio distinto, usa una línea por cada cambio.
 - No incluyas "order" antes de que el cliente confirme.`;
@@ -88,9 +98,9 @@ function parseModel(raw) {
 }
 
 // Convierte la orden del modelo en un pedido válido para el POS. Nunca se pierde un pedido: lo dudoso queda marcado para revisar.
-function buildOrder(o, cfg, items, phoneKnown, sender) {
+function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   const zones = (cfg.zones || []).filter(z => z.n);
-  const dom = norm(o.tipo).startsWith('dom');
+  const dom = norm(o.tipo).startsWith('dom') || (add && add.tipo === 'domicilio');
   const flags = [];
   const lines = [];
   (Array.isArray(o.lineas) ? o.lineas : []).slice(0, 40).forEach(l => {
@@ -111,7 +121,7 @@ function buildOrder(o, cfg, items, phoneKnown, sender) {
   });
   if (!lines.length) flags.push('sin productos');
   let zone = '', fee = 0;
-  if (dom) {
+  if (dom && !add) {
     const z = zones.find(x => norm(x.n) === norm(o.barrio)) || zones.find(x => norm(o.barrio) && norm(x.n).includes(norm(o.barrio)));
     if (z) { zone = z.n; fee = +z.p || 0; } else flags.push('barrio sin tarifa: ' + clean(o.barrio, 40));
     if (!clean(o.direccion, 200)) flags.push('sin dirección');
@@ -123,12 +133,23 @@ function buildOrder(o, cfg, items, phoneKnown, sender) {
   const tr = /transfer|nequi|bre|davi/i.test(pagoBase);
   const payTxt = dom ? (tr && o.pago_domicilio ? pagoBase + (o.pago_domicilio === 'recibir' ? ' · domicilio al recibir' : ' · domicilio incluido') : pagoBase) : '';
   const sub = lines.reduce((s, l) => s + l.price * l.qty, 0);
-  const note = ['💬 WhatsApp', clean(o.nota, 200), !dom ? 'Pago: ' + pagoBase : '', flags.length ? '⚠ REVISAR: ' + flags.join('; ') : ''].filter(Boolean).join(' | ').slice(0, 300);
+  const note = [add ? '➕ ADICIÓN al pedido anterior (mismo cliente, sin cobrar domicilio otra vez)' : '', '💬 WhatsApp', clean(add ? '' : o.nota, 200), !dom && !add ? 'Pago: ' + pagoBase : '', flags.length ? '⚠ REVISAR: ' + flags.join('; ') : ''].filter(Boolean).join(' | ').slice(0, 300);
   return {
-    type: dom ? 'domicilio' : 'mesa', table: (dom ? zone : PICK).slice(0, 40),
-    name: clean(o.nombre || sender, 80), phone: phone.slice(0, 30), address: dom ? clean(o.direccion, 200) : '',
+    type: dom ? 'domicilio' : 'mesa', table: (add ? (dom ? '' : PICK) : (dom ? zone : PICK)).slice(0, 40),
+    name: clean((o.nombre || sender) + (add ? ' (adición)' : ''), 80), phone: phone.slice(0, 30), address: dom ? clean(o.direccion, 200) : '',
     note, pay: payTxt.slice(0, 40), fee, lines, total: sub + fee, status: 'new', source: 'whatsapp',
     createdAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+}
+
+function buildChange(o, base, sender) {
+  const txt = clean(o.nota || (Array.isArray(o.lineas) && o.lineas[0] && o.lineas[0].nota) || 'cambio solicitado', 150);
+  const dom = base.tipo === 'domicilio';
+  return {
+    type: dom ? 'domicilio' : 'mesa', table: dom ? '' : PICK, name: clean((base.name || sender) + ' (cambio)', 80), phone: clean(base.phone, 30), address: dom ? clean(base.address, 200) : '',
+    note: '✏️ CAMBIO AL PEDIDO ANTERIOR | 💬 WhatsApp', pay: '', fee: 0,
+    lines: [{ id: 'cambio', name: '⚠ CAMBIO: ' + txt, qty: 1, price: 0, mods: [], cat: '' }],
+    total: 0, status: 'new', source: 'whatsapp', createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
 }
 
@@ -154,29 +175,50 @@ module.exports = async (req, res) => {
     const key = crypto.createHash('sha1').update(sender).digest('hex').slice(0, 24);
     const ref = db.collection('bot_chats').doc(key);
     const snap = await ref.get();
-    let msgs = [];
-    if (snap.exists) { const d = snap.data(); if (Date.now() - (d.at || 0) < 8 * 3600e3) msgs = Array.isArray(d.msgs) ? d.msgs : []; }
+    let msgs = [], base = null;
+    const prev = snap.exists ? snap.data() : {};
+    if (snap.exists && Date.now() - (prev.at || 0) < 8 * 3600e3) {
+      msgs = Array.isArray(prev.msgs) ? prev.msgs : [];
+      if (prev.lastOrder && prev.lastInfo) {
+        let st = '', sum = '';
+        try { const bs = await db.collection('orders').doc(prev.lastOrder).get(); if (bs.exists) { const b = bs.data(); st = b.status; sum = (b.lines || []).map(l => l.qty + ' ' + l.name + ((l.mods || []).length ? ' (' + l.mods.join(', ') + ')' : '')).join(', '); } } catch (e) {}
+        base = Object.assign({}, prev.lastInfo, { summary: sum || '(sin detalle)', open: (st === 'new' || st === 'received') && Date.now() - (prev.lastAt || 0) < 3 * 3600e3 });
+      }
+    }
 
-    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown) },
+    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base) },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     const { reply, order } = parseModel(raw);
     let out = reply || 'Un momento, por favor.';
     let orderId = null;
 
+    let info = null;
     if (order && cfg.open === false) out = 'Por ahora estamos cerrados. Nuestro horario es de 5 pm a 10 pm. ¡Te esperamos!';
     else if (order) {
-      const doc = buildOrder(order, cfg, items, phoneKnown, sender);
-      if (!doc.lines.length) out = 'Disculpa, no pude registrar el pedido. Una persona del equipo te ayuda enseguida.';
-      else {
-        const r = await db.collection('orders').add(doc);
-        orderId = r.id;
-        try { // aviso push a los equipos (igual que el menú web)
-          await fetch('https://' + req.headers.host + '/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: orderId }), signal: AbortSignal.timeout(4000) });
-        } catch (e) {}
+      const kind = norm(order.tipo);
+      let doc;
+      if (kind === 'cambio' && base && base.open) doc = buildChange(order, base, sender);
+      else if (kind === 'adicion' && base && base.open) doc = buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, direccion: base.address, pago: base.pago, telefono: base.phone }), cfg, items, base.phone || phoneKnown, sender, base);
+      else if ((kind === 'adicion' || kind === 'cambio') && base) { // el pedido anterior ya no se puede tocar: se registra como pedido nuevo con los mismos datos
+        doc = kind === 'cambio' ? null : buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, telefono: base.phone, direccion: base.address, barrio: base.zone, pago: base.pago }), cfg, items, base.phone || phoneKnown, sender);
+        if (!doc) out = 'Ese pedido ya salió o está listo, por eso no puedo cambiarlo. Una persona del equipo te ayuda enseguida.';
+      } else doc = buildOrder(order, cfg, items, phoneKnown, sender);
+      if (doc) {
+        if (!doc.lines.length) out = 'Disculpa, no pude registrar el pedido. Una persona del equipo te ayuda enseguida.';
+        else {
+          const r = await db.collection('orders').add(doc);
+          orderId = r.id;
+          if (kind !== 'adicion' && kind !== 'cambio') info = { tipo: doc.type === 'domicilio' ? 'domicilio' : 'recoger', name: doc.name, phone: doc.phone, address: doc.address, zone: doc.table === PICK ? '' : doc.table, pago: clean(order.pago, 30) };
+          try { // aviso push a los equipos (igual que el menú web)
+            await fetch('https://' + req.headers.host + '/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: orderId }), signal: AbortSignal.timeout(4000) });
+          } catch (e) {}
+        }
       }
     }
-    const hist = orderId ? [] : msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-24);
-    await ref.set({ msgs: hist, at: Date.now(), lastOrder: orderId || (snap.exists ? snap.data().lastOrder || null : null) });
+    const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
+    const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 };
+    if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
+    await ref.set(save);
     return res.status(200).json({ replies: [{ message: out }] });
   } catch (e) {
     console.error('bot', e && e.message);
