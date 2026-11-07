@@ -58,14 +58,18 @@ ${cfg.trInfo ? 'Datos para transferir:\n' + cfg.trInfo : ''}
 
 ${base ? `# PEDIDO ANTERIOR DE ESTE CLIENTE (ya confirmado en esta conversación)
 Cliente: ${base.name}${base.tipo === 'domicilio' ? ' (domicilio)' : ' (recoger)'}.
-Productos: ${base.summary}
+Productos (con su id del catálogo): ${base.lines && base.lines.length ? base.lines.map(l => `[${l.id}] ${l.name} x${l.qty}`).join(', ') : base.summary}
 Estado: ${base.open ? 'EN PREPARACIÓN (todavía se puede agregar o cambiar algo)' : 'YA NO SE PUEDE MODIFICAR (está listo, ya salió o se cerró)'}.
 La conversación sigue abierta. Reglas para mensajes posteriores:
 - Si el cliente quiere AGREGAR algo y el pedido está en preparación: toma solo lo nuevo (con la misma regla de no repetir lo ya pedido), ofrécele lo que falte (bebida, adicionales) solo si es útil, y al final muestra un resumen corto SOLO de lo agregado y pide confirmación. Cuando confirme, responde «Listo, lo agregué a tu pedido.» y envía "order" con "tipo":"adicion" y solo las líneas nuevas (no pidas nombre, teléfono, dirección ni pago otra vez: ya los tienes).
 - Si quiere CAMBIAR o QUITAR algo del pedido anterior y está en preparación: confirma el cambio con una frase corta y envía "order" con "tipo":"cambio" y en "nota" la descripción exacta del cambio (con el nombre del producto afectado). Responde «Listo, avisamos a cocina del cambio.»
 - Si el pedido ya no se puede modificar: explica amablemente que ya salió o está listo y ofrécele hacer un pedido nuevo (se pide todo como un pedido nuevo, con "tipo":"domicilio" o "recoger", incluyendo solo lo del pedido nuevo).
 - Si el cliente quiere un pedido totalmente distinto, tómalo como pedido nuevo.
+- MUY IMPORTANTE: en "order" con "tipo":"adicion" incluye ÚNICAMENTE los productos nuevos. NUNCA repitas los productos del pedido anterior ni cambies su id. Al resumir una adición, muestra solo lo agregado y su valor, no el total de todo el pedido.
 ` : ''}
+# REGLA DE TELÉFONO
+Si el teléfono del cliente figura como NO CONOCIDO, debes pedírselo (para domicilio o para recoger) ANTES de mostrar el resumen final. No confirmes un pedido sin teléfono.
+
 # FORMATO DE RESPUESTA (obligatorio)
 Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
 {"reply": "mensaje para el cliente", "order": null}
@@ -142,6 +146,19 @@ function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   };
 }
 
+function subtractLines(lineas, bl) {
+  const have = {}; bl.forEach(l => { have[l.id] = (have[l.id] || 0) + l.qty; });
+  return lineas.map(l => { const q = Math.max(1, Math.floor(+l.qty) || 1), h = have[l.id] || 0, use = Math.min(h, q); have[l.id] = h - use; return use >= q ? null : Object.assign({}, l, { qty: q - use, unidades_con_cambio: undefined }); }).filter(Boolean);
+}
+function isReemit(lineas, bl) {
+  if (!bl.length) return false;
+  return bl.every(b => lineas.filter(l => String(l.id) === String(b.id)).reduce((s2, l) => s2 + (Math.floor(+l.qty) || 1), 0) >= b.qty);
+}
+function mergeLines(a, b) {
+  const m = {}; a.concat(b).forEach(l => { m[l.id] = m[l.id] ? Object.assign({}, m[l.id], { qty: m[l.id].qty + l.qty }) : Object.assign({}, l); });
+  return Object.values(m);
+}
+
 function buildChange(o, base, sender) {
   const txt = clean(o.nota || (Array.isArray(o.lineas) && o.lineas[0] && o.lineas[0].nota) || 'cambio solicitado', 150);
   const dom = base.tipo === 'domicilio';
@@ -182,23 +199,34 @@ module.exports = async (req, res) => {
       if (prev.lastOrder && prev.lastInfo) {
         let st = '', sum = '';
         try { const bs = await db.collection('orders').doc(prev.lastOrder).get(); if (bs.exists) { const b = bs.data(); st = b.status; sum = (b.lines || []).map(l => l.qty + ' ' + l.name + ((l.mods || []).length ? ' (' + l.mods.join(', ') + ')' : '')).join(', '); } } catch (e) {}
-        base = Object.assign({}, prev.lastInfo, { summary: sum || '(sin detalle)', open: (st === 'new' || st === 'received') && Date.now() - (prev.lastAt || 0) < 3 * 3600e3 });
+        base = Object.assign({}, prev.lastInfo, { lines: Array.isArray(prev.lastInfo.lines) ? prev.lastInfo.lines : [], summary: sum || '(sin detalle)', open: (st === 'new' || st === 'received') && Date.now() - (prev.lastAt || 0) < 3 * 3600e3 });
       }
     }
 
     const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base) },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
-    const { reply, order } = parseModel(raw);
+    let { reply, order } = parseModel(raw);
     let out = reply || 'Un momento, por favor.';
     let orderId = null;
 
-    let info = null;
+    let info = null, addInfo = null;
     if (order && cfg.open === false) out = 'Por ahora estamos cerrados. Nuestro horario es de 5 pm a 10 pm. ¡Te esperamos!';
     else if (order) {
-      const kind = norm(order.tipo);
-      let doc;
-      if (kind === 'cambio' && base && base.open) { doc = buildChange(order, base, sender); doc.addTo = prev.lastOrder; doc.kind = 'cambio'; }
-      else if (kind === 'adicion' && base && base.open) { doc = buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, direccion: base.address, pago: base.pago, telefono: base.phone }), cfg, items, base.phone || phoneKnown, sender, base); doc.addTo = prev.lastOrder; doc.kind = 'adicion'; }
+      let kind = norm(order.tipo), warn = false;
+      const bl = base ? base.lines : [];
+      const lin = Array.isArray(order.lineas) ? order.lineas : [];
+      if (base && base.open && kind !== 'cambio') {
+        const ids = new Set(bl.map(l => String(l.id)));
+        const full = kind === 'domicilio' || kind === 'recoger';
+        if ((kind === 'adicion' && isReemit(lin, bl)) || (full && lin.some(l => ids.has(String(l.id))))) { // el modelo repitió el pedido anterior: se deja solo lo nuevo
+          order = Object.assign({}, order, { tipo: 'adicion', lineas: subtractLines(lin, bl) }); kind = 'adicion'; warn = true;
+          if (!order.lineas.length) { out = 'Ya lo tengo anotado en tu pedido. ¿Necesitas algo más?'; kind = 'skip'; }
+        }
+      }
+      let doc = null;
+      if (kind === 'skip') doc = null;
+      else if (kind === 'cambio' && base && base.open) { doc = buildChange(order, base, sender); doc.addTo = prev.lastOrder; doc.kind = 'cambio'; }
+      else if (kind === 'adicion' && base && base.open) { doc = buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, direccion: base.address, pago: base.pago, telefono: base.phone }), cfg, items, base.phone || phoneKnown, sender, base); doc.addTo = prev.lastOrder; doc.kind = 'adicion'; if (warn) doc.note += ' | ⚠ REVISAR: confirmar que sean solo productos nuevos'; }
       else if ((kind === 'adicion' || kind === 'cambio') && base) { // el pedido anterior ya no se puede tocar: se registra como pedido nuevo con los mismos datos
         doc = kind === 'cambio' ? null : buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, telefono: base.phone, direccion: base.address, barrio: base.zone, pago: base.pago }), cfg, items, base.phone || phoneKnown, sender);
         if (!doc) out = 'Ese pedido ya salió o está listo, por eso no puedo cambiarlo. Una persona del equipo te ayuda enseguida.';
@@ -208,7 +236,9 @@ module.exports = async (req, res) => {
         else {
           const r = await db.collection('orders').add(doc);
           orderId = r.id;
-          if (kind !== 'adicion' && kind !== 'cambio') info = { tipo: doc.type === 'domicilio' ? 'domicilio' : 'recoger', name: doc.name, phone: doc.phone, address: doc.address, zone: doc.table === PICK ? '' : doc.table, pago: clean(order.pago, 30) };
+          const real = doc.lines.filter(l => !String(l.id).startsWith('x') && l.id !== 'cambio').map(l => ({ id: l.id, name: l.name, qty: l.qty }));
+          if (doc.addTo && doc.kind === 'adicion') addInfo = Object.assign({}, prev.lastInfo, { lines: mergeLines(bl, real) });
+          else if (doc.kind !== 'cambio') info = { tipo: doc.type === 'domicilio' ? 'domicilio' : 'recoger', name: doc.name, phone: doc.phone, address: doc.address, zone: doc.table === PICK ? '' : doc.table, pago: clean(order.pago, 30), lines: real };
           try { // aviso push a los equipos (igual que el menú web)
             await fetch('https://' + req.headers.host + '/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: orderId }), signal: AbortSignal.timeout(4000) });
           } catch (e) {}
@@ -218,6 +248,7 @@ module.exports = async (req, res) => {
     const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
     const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 };
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
+    else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
     return res.status(200).json({ replies: [{ message: out }] });
   } catch (e) {
