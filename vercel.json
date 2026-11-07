@@ -1,1 +1,25 @@
-{ "cleanUrls": true, "functions": { "api/notify.js": { "maxDuration": 15 } }, "headers": [ { "source": "/(.*)", "headers": [ { "key": "X-Content-Type-Options", "value": "nosniff" } ] } ] }
+{
+  "cleanUrls": true,
+  "functions": {
+    "api/notify.js": {
+      "maxDuration": 15
+    },
+    "api/pago.js": {
+      "maxDuration": 15
+    },
+    "api/bot.js": {
+      "maxDuration": 30
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
+    }
+  ]
+}
