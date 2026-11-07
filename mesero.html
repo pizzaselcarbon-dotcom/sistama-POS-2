@@ -248,11 +248,11 @@ function render(keep){
     const tables=(C&&C.tables)||[];
     el.innerHTML=`<div class="topbar"><h1>🧑‍🍳 Meser@s · ${esc((C&&C.biz)||'')}</h1>${themeBtn()}</div>
     <div class="who"><div class="lbl" style="margin-top:0">Meser@</div><input class="f" id="wn" placeholder="Tu nombre" maxlength="40" value="${esc(waiter)}" oninput="setName(this.value)"></div>
+    <div class="lbl" style="margin:8px 16px 0">Para llevar</div>
+    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para llevar</b><span class="ch">Nuevo pedido</span><span class="sub">Toca para tomar pedido para recoger</span></button></div>
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
-    <div class="lbl" style="margin:8px 16px 0">Para llevar</div>
-    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para llevar</b><span class="ch">Nuevo pedido</span><span class="sub">Toca para tomar pedido para recoger</span></button></div>
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}
     `;
     return;
