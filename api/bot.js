@@ -170,6 +170,36 @@ function buildChange(o, base, sender) {
   };
 }
 
+// ---- horario de atención (hora de Colombia) ----
+const DN = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const hm = t => { const [h, m] = String(t || '0:0').split(':'); return (+h || 0) * 60 + (+m || 0); };
+const t12 = t => { const x = hm(t), h = Math.floor(x / 60) % 24, m = x % 60; return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h < 12 ? 'a. m.' : 'p. m.'); };
+function nowCO() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return { d: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), m: (+p.hour) * 60 + (+p.minute) };
+}
+function hrOn(cfg) { return !!(cfg && cfg.hr && cfg.hr.on && Array.isArray(cfg.hr.d)); }
+function inHours(cfg) {
+  if (!hrOn(cfg)) return true;
+  const hr = cfg.hr, n = nowCO(), c = hr.d[n.d], p = hr.d[(n.d + 6) % 7];
+  if (c && c.o) { const a = hm(c.a), z = hm(c.c); if (a === z || (a < z ? (n.m >= a && n.m < z) : n.m >= a)) return true; }
+  if (p && p.o) { const a = hm(p.a), z = hm(p.c); if (a > z && n.m < z) return true; }
+  return false;
+}
+function scheduleText(cfg) {
+  if (!hrOn(cfg)) return '';
+  const lab = i => { const d = cfg.hr.d[i] || {}; return d.o ? t12(d.a) + ' – ' + t12(d.c) : 'Cerrado'; };
+  const order = [1, 2, 3, 4, 5, 6, 0], runs = [];
+  order.forEach(i => { const l = lab(i), last = runs[runs.length - 1]; if (last && last.l === l) last.e = i; else runs.push({ s: i, e: i, l }); });
+  return runs.map(r => (r.s === r.e ? DN[r.s] : DN[r.s] + ' a ' + DN[r.e]) + ': ' + r.l).join('\n');
+}
+function closedText(cfg) {
+  const sch = scheduleText(cfg), byHours = !inHours(cfg);
+  return '🔒 ' + (byHours ? 'Por ahora estamos *CERRADOS*.' : 'Hoy no estamos recibiendo pedidos por este medio.') +
+    (sch ? '\n\n🕒 *Horario de atención:*\n' + sch + '\n\nEscríbenos en ese horario y con gusto te atendemos 😊' : '') +
+    (cfg.closedMsg ? '\n\n' + String(cfg.closedMsg).slice(0, 300) : '');
+}
+
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST' });
@@ -203,6 +233,9 @@ module.exports = async (req, res) => {
       }
     }
 
+    // Fuera de horario (o cerrado a mano): responder CERRADO sin gastar IA, salvo que el cliente ya tenga un pedido abierto
+    if ((cfg.open === false || !inHours(cfg)) && !(base && base.open)) return res.status(200).json({ replies: [{ message: closedText(cfg), delay: 1 }] });
+
     const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base) },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     let { reply, order } = parseModel(raw);
@@ -210,7 +243,7 @@ module.exports = async (req, res) => {
     let orderId = null;
 
     let info = null, addInfo = null;
-    if (order && cfg.open === false) out = 'Por ahora estamos cerrados. Nuestro horario es de 5 pm a 10 pm. ¡Te esperamos!';
+    if (order && cfg.open === false) out = closedText(cfg);
     else if (order) {
       let kind = norm(order.tipo), warn = false;
       const bl = base ? base.lines : [];
