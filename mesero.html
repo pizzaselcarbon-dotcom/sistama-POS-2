@@ -97,11 +97,21 @@ const db=getFirestore(initializeApp(FIREBASE_CONFIG));
 
 let C=null,items=[],mods=[],ST={},loaded={c:false,i:false};
 let view='tables',table=null,cart=[],carts={},ready={},sent={};const TG='Para recoger';let cname='',cphone='';
+let TK=[];try{TK=JSON.parse(LS.get('w_tk')||'[]').filter(x=>x&&x.id&&Date.now()-x.at<8*3600e3)}catch(e){TK=[]}
+const saveTK=()=>LS.set('w_tk',JSON.stringify(TK.slice(0,30)));
+const TKST={new:['📨 Enviado','#b7791f'],received:['🍳 En cocina','#b7791f'],ready:['🔔 Listo para entregar','#1F9D63'],cancelled:['❌ Cancelado','#c0392b']};
+window.tkDone=id=>{TK=TK.filter(x=>x.id!==id);saveTK();render()};
+function tkList(){if(!TK.length)return'';
+  return `<div class="lbl" style="margin:14px 16px 0">Pedidos para llevar (${TK.length})</div><div style="padding:0 16px">${TK.map(x=>{const st=TKST[x.st]||TKST.new,t=new Date(x.at).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
+    return `<div class="mesa${x.st==='ready'?' rdy':''}" style="margin-top:8px;min-height:0;gap:6px;cursor:default"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:17px">🥡 ${esc(x.name)}</b><span class="sub">${t}</span></div>${x.phone?`<span class="sub">📞 ${esc(x.phone)}</span>`:''}<span style="font-size:13px;font-weight:700;color:${st[1]}">${st[0]}</span>
+    <div style="font-size:14px">${(x.lines||[]).map(l=>`<div>${l.qty} × ${esc(l.name)}${(l.mods&&l.mods.length)?` <span class="sub">(${l.mods.map(esc).join(', ')})</span>`:''}</div>`).join('')}</div>
+    ${x.note?`<span class="sub">📝 ${esc(x.note)}</span>`:''}<div style="display:flex;justify-content:space-between;align-items:center"><b>${fmt(x.total||0)}</b><button class="mch" style="margin:0" onclick="tkDone('${x.id}')">✔ ${x.st==='cancelled'?'Quitar':'Entregado'}</button></div></div>`}).join('')}</div>`}
 let catSel=null,catList=[],pick=null,cartOpen=false,sending=false,err='';
 let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1',nameOk=SS.get('w_named')==='1'&&!!(LS.get('w_name')||'').trim();
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},()=>{loaded.c=true;render()});
 onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},()=>{loaded.i=true;render()});
+TK.filter(x=>x.st!=='cancelled').forEach(x=>watchOrder({id:x.id},'🥡 '+x.name));
 onSnapshot(doc(db,'menu','status'),s=>{ST=s.exists()?(s.data().tables||{}):{};
   Object.keys(ready).forEach(t=>{if(!(ST[t]&&ST[t].n>0))delete ready[t]});
   Object.keys(carts).forEach(t=>{if(!(ST[t]&&ST[t].n>0)&&!(carts[t]||[]).length)delete carts[t]});
@@ -169,9 +179,9 @@ window.fld=v=>{note=v};
 
 function watchOrder(ref,tb){
   let nr=false,nc=false;
-  onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;
-    if(st==='ready'&&!nr){nr=true;if(ready)ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo'+(tb.startsWith('🥡')?' para entregar':' para servir'),true);render()}
-    if(st==='cancelled'&&!nc){nc=true;toast('❌ Pedido de '+tb+' cancelado')}},()=>{});
+  onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;const k=TK.find(y=>y.id===ref.id),was=k?k.st:undefined;if(k&&k.st!==st){k.st=st;saveTK();if(view==='tables')render()}
+    if(st==='ready'&&!nr){nr=true;if(was==='ready')return;if(ready)ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo'+(tb.startsWith('🥡')?' para entregar':' para servir'),true);render()}
+    if(st==='cancelled'&&!nc){nc=true;if(was==='cancelled')return;toast('❌ Pedido de '+tb+' cancelado')}},()=>{});
 }
 window.editAcct=i=>{
   const l=((ST[table]||{}).l||[])[i];if(!l)return;
@@ -203,11 +213,12 @@ window.send=async()=>{
   sending=true;render(true);
   const tb=table,lines=cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''}));
   try{
-    const tk=tb===TG,cn=cname.trim().slice(0,60),lb=tk?'🥡 '+cn:tb;
+    const tk=tb===TG,cn=cname.trim().slice(0,60),lb=tk?'🥡 '+cn:tb,note0=note.trim().slice(0,240),tot0=sub();
     const ref=await addOrder({type:'mesa',table:tb,name:tk?cn:waiter.trim().slice(0,80),phone:tk?cphone.replace(/[^\d+ ]/g,'').slice(0,20):'',address:'',note:(tk?('Meser@: '+waiter.trim().slice(0,40)+(note.trim()?' | ':'')):'')+note.trim().slice(0,tk?240:300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
     toast('✅ Enviado a cocina · '+lb,true);
     cart=[];carts[tb]=[];note='';if(tk){cname='';cphone=''}cartOpen=false;sending=false;view='tables';table=null;
     if(!tk)sent[tb]=Date.now();
+    if(tk){TK.unshift({id:ref.id,name:cn,phone:cphone.replace(/[^\d+ ]/g,'').slice(0,20),note:note0,lines:lines.map(l=>({name:l.name,qty:l.qty,mods:l.mods||[]})),total:tot0,at:Date.now(),st:'new'});saveTK()}
     watchOrder(ref,lb);
     render();
   }catch(e){sending=false;err='No se pudo enviar. Revisa la conexión e intenta de nuevo.';render(true)}
@@ -252,7 +263,7 @@ function render(keep){
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
     <div class="lbl" style="margin:8px 16px 0">Para llevar</div>
-    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para llevar</b><span class="ch">Nuevo pedido</span><span class="sub">Toca para tomar pedido para recoger</span></button></div>
+    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para llevar</b><span class="ch">➕ Nuevo pedido</span><span class="sub">Toca para tomar otro pedido para recoger</span></button></div>${tkList()}
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}
     `;
     return;
