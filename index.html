@@ -193,7 +193,25 @@ window.setPay=v=>{form.pay=v;render(true)};
 window.setDomPay=v=>{form.domPay=v;render(true)};
 window.reset=()=>{lastWa='';if(unsub){unsub();unsub=null}cart=[];orderId=null;orderSt='new';form.note='';cartOpen=false;render()};
 
-const isOpen=()=>!C||C.open!==false;
+const DN=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+const hm=t=>{const [h,m]=String(t||'0:0').split(':');return (+h||0)*60+(+m||0)};
+const t12=t=>{const x=hm(t),h=Math.floor(x/60)%24,m=x%60;return ((h%12)||12)+':'+String(m).padStart(2,'0')+' '+(h<12?'a. m.':'p. m.')};
+function nowCO(){try{const p=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:'America/Bogota',weekday:'short',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(new Date()).map(x=>[x.type,x.value]));return{d:['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(p.weekday),m:(+p.hour)*60+(+p.minute)}}catch(e){const n=new Date();return{d:n.getDay(),m:n.getHours()*60+n.getMinutes()}}}
+function inHours(){const hr=C&&C.hr;if(!hr||!hr.on||!Array.isArray(hr.d))return true;const n=nowCO(),c=hr.d[n.d],p=hr.d[(n.d+6)%7];
+  if(c&&c.o){const a=hm(c.a),z=hm(c.c);if(a===z||(a<z?(n.m>=a&&n.m<z):n.m>=a))return true}
+  if(p&&p.o){const a=hm(p.a),z=hm(p.c);if(a>z&&n.m<z)return true}
+  return false}
+const outHours=()=>!inHours()&&!(type==='mesa'&&mesaQR);
+const isOpen=()=>(!C||C.open!==false)&&!outHours();
+let closedSeen=false,lastOpen=null;
+window.closeClosed=()=>{closedSeen=true;render()};
+function closedSheet(){const hr=C&&C.hr&&C.hr.on&&Array.isArray(C.hr.d)?C.hr:null,td=nowCO().d;
+  return `<div class="ov ask" style="z-index:40"><div class="sh" style="border-radius:18px;max-width:420px;text-align:center;padding:22px 18px"><div style="font-size:46px">🔒</div><h2 style="margin:6px 0 4px;font-size:30px;letter-spacing:1px;color:#c0392b">CERRADO</h2>
+  <p class="sec" style="margin:0 0 12px;font-size:15px">${outHours()?'Por ahora no estamos recibiendo pedidos.':'Hoy no estamos recibiendo pedidos por este medio.'}</p>
+  ${hr?`<div style="text-align:left;background:var(--sf);border-radius:12px;padding:10px 14px;margin:0 0 12px"><b>🕒 Horario de atención</b>${[1,2,3,4,5,6,0].map(i=>{const d=hr.d[i]||{};return `<div style="display:flex;justify-content:space-between;gap:10px;margin-top:6px;font-size:15px${i===td?';font-weight:700':''}"><span>${DN[i]}${i===td?' (hoy)':''}</span><span>${d.o?t12(d.a)+' – '+t12(d.c):'Cerrado'}</span></div>`}).join('')}</div>`:''}
+  ${C&&C.closedMsg?`<p class="sec">${esc(C.closedMsg)}</p>`:''}
+  <button class="big" onclick="closeClosed()">Ver el menú</button></div></div>`}
+setInterval(()=>{if(!C)return;const o=isOpen();if(lastOpen!==null&&o!==lastOpen){closedSeen=false;render()}lastOpen=o},30000);
 
 let lastWa='';
 function waDigits(){let d=String((C&&C.wa)||WA_FIJO||'').replace(/\D/g,'');if(d.length===10&&d[0]==='3')d='57'+d;return d}
@@ -320,7 +338,7 @@ function render(keepFocus){
   const head=`<header class="top"><h1>${esc((C&&C.biz)||'Menú')}</h1>${themeBtn()}${C&&C.slogan?`<p>${esc(C.slogan)}</p>`:''}
    ${mesaQR?`<span class="pill">📍 ${esc(mesaQR)}</span>`:`<div class="seg"><button class="${type==='domicilio'?'on':''}" onclick="setType('domicilio')">🛵 Domicilio</button><button class="${type==='mesa'?'on':''}" onclick="setType('mesa')">🏪 Paso a recoger</button></div>`}
    </header>`;
-  const closed=!isOpen()?`<div class="msg">😴 Por ahora no estamos recibiendo pedidos por este medio. ${esc((C&&C.closedMsg)||'')}</div>`:'';
+  const closed=!isOpen()?`<div class="msg">😴 ${outHours()?'Estamos cerrados.':'Por ahora no estamos recibiendo pedidos por este medio.'} ${esc((C&&C.closedMsg)||'')}</div>`:'';
   catList=cats;if(!catSel||!cats.includes(catSel))catSel=cats[0]||null;
   const itemRow=i=>{
     const out=outOf(i),q=qtyOf(i.id);
@@ -333,7 +351,7 @@ function render(keepFocus){
   const body=`<div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(itemRow).join('')}</main></div>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Ver pedido (${count()})</span><span>${fmt(sub()+fee())}</span></button></div>`:'';
   const dbg=P.has('debug')?`<pre style="margin:12px;padding:12px;border-radius:10px;background:var(--sf);color:var(--tx);font-size:13px;white-space:pre-wrap">Menú v9\nWhatsApp: ${waDigits()||'NO CONFIGURADO'} ${(C&&C.wa)?'(desde el POS)':(WA_FIJO?'(fijo en el menú)':'')}\nZonas de domicilio: ${zones().length}\nOrden de categorías: ${(C&&C.catOrd)?'propio':'por defecto'}\nPedidos: ${isOpen()?'abiertos':'cerrados'}</pre>`:'';
-  el.innerHTML=head+closed+body+dbg+bar+(cartOpen?cartSheet():'')+(pick?pickSheet():'')+(welcome?welcomeSheet():'');
+  el.innerHTML=head+closed+body+dbg+bar+(cartOpen?cartSheet():'')+(pick?pickSheet():'')+(welcome?welcomeSheet():'')+(C&&!isOpen()&&!closedSeen&&!welcome?closedSheet():'');
   const sh=document.querySelector('.sh');if(sh&&st)sh.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
