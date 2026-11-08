@@ -97,21 +97,38 @@ const db=getFirestore(initializeApp(FIREBASE_CONFIG));
 
 let C=null,items=[],mods=[],ST={},loaded={c:false,i:false};
 let view='tables',table=null,cart=[],carts={},ready={},sent={};const TG='Para recoger';let cname='',cphone='';
-let TK=[];try{TK=JSON.parse(LS.get('w_tk')||'[]').filter(x=>x&&x.id&&Date.now()-x.at<8*3600e3)}catch(e){TK=[]}
+let TK=[],tkCur=null,tkAdd=null;try{TK=JSON.parse(LS.get('w_tk')||'[]').filter(x=>x&&x.id&&Date.now()-x.at<8*3600e3)}catch(e){TK=[]}
+TK.forEach(x=>{if(!x.sts)x.sts={[x.id]:x.st||'new'}});
 const saveTK=()=>LS.set('w_tk',JSON.stringify(TK.slice(0,30)));
 const TKST={new:['📨 Enviado','#b7791f'],received:['🍳 En cocina','#b7791f'],ready:['🔔 Listo para entregar','#1F9D63'],cancelled:['❌ Cancelado','#c0392b']};
-window.tkDone=id=>{TK=TK.filter(x=>x.id!==id);saveTK();render()};
+const tkStat=x=>{const v=Object.values(x.sts||{}),a=v.filter(z=>z!=='cancelled');if(!a.length)return'cancelled';if(a.every(z=>z==='ready'))return'ready';return a.includes('received')?'received':'new'};
+const tkFind=id=>TK.find(y=>y.id===id||(y.sts&&id in y.sts));
+const tkMerge=(x,ls)=>{ls.forEach(l=>{const k=String(l.id)+'|'+(l.mods||[]).join(','),y=x.lines.find(z=>String(z.id)+'|'+(z.mods||[]).join(',')===k);y?y.qty+=l.qty:x.lines.push({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods||[]})});x.total=x.lines.reduce((a,l)=>a+(l.price||0)*l.qty,0)};
+window.tkDone=id=>{TK=TK.filter(x=>x.id!==id);saveTK();if(view==='tkacct'&&tkCur===id)view='tables';render()};
+window.openTk=id=>{tkCur=id;view='tkacct';window.scrollTo(0,0);render()};
+window.tkMore=()=>{const x=TK.find(y=>y.id===tkCur);if(!x)return;tkAdd=x;if(table)carts[table]=cart;table=TG;cart=[];view='order';catSel=null;err='';window.scrollTo(0,0);render()};
+const tkLine=i=>{const x=TK.find(y=>y.id===tkCur),l=x&&x.lines[i];return l&&l.id!=null?{i:l.id,n:l.name,m:l.mods||[],q:l.qty,p:l.price||0}:null};
+let tkBusy=false;
+async function tkRemove(i,q){const x=TK.find(y=>y.id===tkCur),l=tkLine(i);if(!x||!l||tkBusy)return;q=q||1;
+  if(!waiter.trim()){toast('Escribe tu nombre');return}
+  if(!confirm('¿Quitar '+q+' '+l.n+' del pedido de '+x.name+'? Se avisará a cocina.'))return;
+  tkBusy=true;
+  try{await addOrder({type:'mesa',table:TG,name:x.name,phone:x.phone||'',address:'',note:'[+'+x.id+'] Meser@: '+waiter.trim().slice(0,40),pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m,cat:''}],total:0,status:'new',createdAt:serverTimestamp()});
+    const y=x.lines[i];y.qty-=q;if(y.qty<=0)x.lines.splice(i,1);x.total=x.lines.reduce((a,z)=>a+(z.price||0)*z.qty,0);saveTK();toast('✏️ Cambio enviado a cocina',true)}
+  catch(e){toast('No se pudo enviar el cambio')}
+  tkBusy=false;render()}
+window.tkMinus=i=>tkRemove(i,1);
 function tkList(){if(!TK.length)return'';
-  return `<div class="lbl" style="margin:14px 16px 0">Pedidos para llevar (${TK.length})</div><div style="padding:0 16px">${TK.map(x=>{const st=TKST[x.st]||TKST.new,t=new Date(x.at).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
-    return `<div class="mesa${x.st==='ready'?' rdy':''}" style="margin-top:8px;min-height:0;gap:6px;cursor:default"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:17px">🥡 ${esc(x.name)}</b><span class="sub">${t}</span></div>${x.phone?`<span class="sub">📞 ${esc(x.phone)}</span>`:''}<span style="font-size:13px;font-weight:700;color:${st[1]}">${st[0]}</span>
+  return `<div class="lbl" style="margin:14px 16px 0">Pedidos para llevar (${TK.length})</div><div style="padding:0 16px">${TK.map(x=>{const st=TKST[tkStat(x)]||TKST.new,t=new Date(x.at).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
+    return `<div class="mesa${tkStat(x)==='ready'?' rdy':''}" style="margin-top:8px;min-height:0;gap:6px;cursor:default"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:17px">🥡 ${esc(x.name)}</b><span class="sub">${t}</span></div>${x.phone?`<span class="sub">📞 ${esc(x.phone)}</span>`:''}<span style="font-size:13px;font-weight:700;color:${st[1]}">${st[0]}</span>
     <div style="font-size:14px">${(x.lines||[]).map(l=>`<div>${l.qty} × ${esc(l.name)}${(l.mods&&l.mods.length)?` <span class="sub">(${l.mods.map(esc).join(', ')})</span>`:''}</div>`).join('')}</div>
-    ${x.note?`<span class="sub">📝 ${esc(x.note)}</span>`:''}<div style="display:flex;justify-content:space-between;align-items:center"><b>${fmt(x.total||0)}</b><button class="mch" style="margin:0" onclick="tkDone('${x.id}')">✔ ${x.st==='cancelled'?'Quitar':'Entregado'}</button></div></div>`}).join('')}</div>`}
+    ${x.note?`<span class="sub">📝 ${esc(x.note)}</span>`:''}<div style="display:flex;justify-content:space-between;align-items:center"><b>${fmt(x.total||0)}</b><span style="display:flex;gap:6px">${tkStat(x)==='cancelled'?'':`<button class="mch" style="margin:0" onclick="openTk('${x.id}')">✏️ Modificar</button>`}<button class="mch" style="margin:0" onclick="tkDone('${x.id}')">✔ ${tkStat(x)==='cancelled'?'Quitar':'Entregado'}</button></span></div></div>`}).join('')}</div>`}
 let catSel=null,catList=[],pick=null,cartOpen=false,sending=false,err='';
 let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1',nameOk=SS.get('w_named')==='1'&&!!(LS.get('w_name')||'').trim();
 
 onSnapshot(doc(db,'menu','config'),s=>{C=s.exists()?s.data():null;loaded.c=true;mods=(C&&C.mods)||[];render()},()=>{loaded.c=true;render()});
 onSnapshot(collection(db,'menu_items'),s=>{items=s.docs.map(d=>d.data()).sort((a,b)=>(a.order||0)-(b.order||0));loaded.i=true;render()},()=>{loaded.i=true;render()});
-TK.filter(x=>x.st!=='cancelled').forEach(x=>watchOrder({id:x.id},'🥡 '+x.name));
+TK.forEach(x=>Object.keys(x.sts).filter(id=>x.sts[id]!=='cancelled').forEach(id=>watchOrder({id},'🥡 '+x.name)));
 onSnapshot(doc(db,'menu','status'),s=>{ST=s.exists()?(s.data().tables||{}):{};
   Object.keys(ready).forEach(t=>{if(!(ST[t]&&ST[t].n>0))delete ready[t]});
   Object.keys(carts).forEach(t=>{if(!(ST[t]&&ST[t].n>0)&&!(carts[t]||[]).length)delete carts[t]});
@@ -155,7 +172,8 @@ window.removeLine=async (i,q)=>{q=q||1;
   catch(e){toast('No se pudo enviar el cambio')}
   remBusy=false;
 };
-window.backTables=()=>{carts[table]=cart;table=null;view='tables';cartOpen=false;window.scrollTo(0,0);render()};
+window.tkBack=()=>{const x=tkAdd;tkAdd=null;table=null;cartOpen=false;tkCur=x?x.id:tkCur;view='tkacct';render()};
+window.backTables=()=>{tkAdd=null;tkCur=null;carts[table]=cart;table=null;view='tables';cartOpen=false;window.scrollTo(0,0);render()};
 window.openCat=i=>{catSel=catList[i]||null;window.scrollTo(0,0);render()};
 window.tapAdd=id=>{const it=items.find(i=>i.id===id);if(!it||outOf(it)||!isOpen())return;const g=modGroups(it);g.length?(pick={it,g,sel:{},txt:'',ed:null},render()):(addLine(it,[]),render())};
 window.cardTap=id=>{const ix=cart.map((l,i)=>l.id===id?i:-1).filter(i=>i>=0);if(!ix.length)return;ix.length===1?editLine(ix[0]):openCart()};
@@ -179,7 +197,7 @@ window.fld=v=>{note=v};
 
 function watchOrder(ref,tb){
   let nr=false,nc=false;
-  onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;const k=TK.find(y=>y.id===ref.id),was=k?k.st:undefined;if(k&&k.st!==st){k.st=st;saveTK();if(view==='tables')render()}
+  onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;const k=tkFind(ref.id),was=k?k.sts[ref.id]:undefined;if(k&&k.sts[ref.id]!==st){k.sts[ref.id]=st;k.st=tkStat(k);saveTK();if(view==='tables'||view==='tkacct')render()}
     if(st==='ready'&&!nr){nr=true;if(was==='ready')return;if(ready)ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo'+(tb.startsWith('🥡')?' para entregar':' para servir'),true);render()}
     if(st==='cancelled'&&!nc){nc=true;if(was==='cancelled')return;toast('❌ Pedido de '+tb+' cancelado')}},()=>{});
 }
@@ -189,9 +207,15 @@ window.editAcct=i=>{
   const g=modGroups(it),sel={},used=new Set(),ms=l.m||[];
   g.forEach(m=>m.opts.forEach((o,j)=>{if(ms.includes(o.n)&&!used.has(o.n)){sel[m.id+'_'+j]=true;used.add(o.n)}}));
   pick={it,g,sel,txt:ms.filter(n=>!used.has(n)).join(', ').slice(0,80),ed:null,acct:{i,q:1,max:l.q}};render()};
+window.editTk=i=>{const l=tkLine(i);if(!l){toast('Este pedido no se puede modificar');return}
+  const it=items.find(x=>String(x.id)===String(l.i));if(!it){toast('Este producto ya no está en el menú');return}
+  const g=modGroups(it),sel={},used=new Set(),ms=l.m||[];
+  g.forEach(m=>m.opts.forEach((o,j)=>{if(ms.includes(o.n)&&!used.has(o.n)){sel[m.id+'_'+j]=true;used.add(o.n)}}));
+  pick={it,g,sel,txt:ms.filter(n=>!used.has(n)).join(', ').slice(0,80),ed:null,tk:true,acct:{i,q:1,max:l.q}};render()};
 window.acctQty=d=>{const a=pick.acct;a.q=Math.max(1,Math.min(a.max,a.q+d));render(true)};
-window.acctDel=()=>{const a=pick.acct;pick=null;removeLine(a.i,a.q)};
+window.acctDel=()=>{const a=pick.acct,tk=pick.tk;pick=null;tk?tkRemove(a.i,a.q):removeLine(a.i,a.q)};
 async function applyAcct(opts){
+  if(pick.tk){return applyTk(opts)}
   const a=pick.acct,l=((ST[table]||{}).l||[])[a.i],it=pick.it;if(!l){pick=null;return render()}
   const nm=opts.map(o=>o.n);
   if(JSON.stringify(nm)===JSON.stringify(l.m||[])){pick=null;return render()}
@@ -205,20 +229,39 @@ async function applyAcct(opts){
   }catch(e){toast('No se pudo enviar el cambio')}
   remBusy=false;
 }
+async function applyTk(opts){
+  const a=pick.acct,x=TK.find(y=>y.id===tkCur),l=tkLine(a.i),it=pick.it;if(!x||!l){pick=null;return render()}
+  const nm=opts.map(o=>o.n);
+  if(JSON.stringify(nm)===JSON.stringify(l.m||[])){pick=null;return render()}
+  if(!waiter.trim()){toast('Escribe tu nombre');return}
+  if(tkBusy)return;tkBusy=true;
+  const price=it.price+opts.reduce((z,o)=>z+(+o.p||0),0),q=a.q;pick=null;render();
+  try{
+    await addOrder({type:'mesa',table:TG,name:x.name,phone:x.phone||'',address:'',note:'[+'+x.id+'] Meser@: '+waiter.trim().slice(0,40),pay:'mesera-mod',fee:0,lines:[{id:l.i,name:l.n,qty:q,price:l.p,mods:l.m,cat:''}],total:0,status:'new',createdAt:serverTimestamp()});
+    const ref=await addOrder({type:'mesa',table:TG,name:x.name,phone:x.phone||'',address:'',note:('[+'+x.id+'] CAMBIO: '+it.name+(nm.length?' → '+nm.join(', '):'')).slice(0,300),pay:'mesera',fee:0,lines:[{id:it.id,name:it.name,qty:q,price,mods:nm,cat:it.cat||''}],total:price*q,status:'new',createdAt:serverTimestamp()});
+    const y=x.lines[a.i];y.qty-=q;if(y.qty<=0)x.lines.splice(a.i,1);
+    tkMerge(x,[{id:it.id,name:it.name,qty:q,price,mods:nm}]);x.sts[ref.id]='new';x.st=tkStat(x);saveTK();
+    watchOrder(ref,'🥡 '+x.name);toast('✏️ Cambio enviado a cocina',true);
+  }catch(e){toast('No se pudo enviar el cambio')}
+  tkBusy=false;render();
+}
 window.send=async()=>{
   if(sending)return;err='';
   if(!cart.length){err='Agrega productos al pedido.';return render(true)}
   if(!waiter.trim()){err='Escribe tu nombre (arriba, en la lista de mesas).';return render(true)}
-  if(table===TG&&cname.trim().length<2){err='Escribe el nombre del cliente.';return render(true)}
+  if(table===TG&&!tkAdd&&cname.trim().length<2){err='Escribe el nombre del cliente.';return render(true)}
   sending=true;render(true);
   const tb=table,lines=cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''}));
   try{
-    const tk=tb===TG,cn=cname.trim().slice(0,60),lb=tk?'🥡 '+cn:tb,note0=note.trim().slice(0,240),tot0=sub();
+    if(tb===TG&&tkAdd){const x=tkAdd,ref=await addOrder({type:'mesa',table:TG,name:x.name,phone:x.phone||'',address:'',note:('[+'+x.id+'] ➕ ADICIÓN | Meser@: '+waiter.trim().slice(0,40)+(note.trim()?' | '+note.trim():'')).slice(0,300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
+      tkMerge(x,lines.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods})));x.sts[ref.id]='new';x.st=tkStat(x);saveTK();
+      toast('✅ Adición enviada a cocina · 🥡 '+x.name,true);cart=[];carts[TG]=[];note='';cartOpen=false;sending=false;tkAdd=null;table=null;tkCur=x.id;view='tkacct';watchOrder(ref,'🥡 '+x.name);window.scrollTo(0,0);render();return}
+    const tk=tb===TG,cn=cname.trim().slice(0,60),cph=cphone.replace(/[^\d+ ]/g,'').slice(0,20),lb=tk?'🥡 '+cn:tb,note0=note.trim().slice(0,240),tot0=sub();
     const ref=await addOrder({type:'mesa',table:tb,name:tk?cn:waiter.trim().slice(0,80),phone:tk?cphone.replace(/[^\d+ ]/g,'').slice(0,20):'',address:'',note:(tk?('Meser@: '+waiter.trim().slice(0,40)+(note.trim()?' | ':'')):'')+note.trim().slice(0,tk?240:300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
     toast('✅ Enviado a cocina · '+lb,true);
     cart=[];carts[tb]=[];note='';if(tk){cname='';cphone=''}cartOpen=false;sending=false;view='tables';table=null;
     if(!tk)sent[tb]=Date.now();
-    if(tk){TK.unshift({id:ref.id,name:cn,phone:cphone.replace(/[^\d+ ]/g,'').slice(0,20),note:note0,lines:lines.map(l=>({name:l.name,qty:l.qty,mods:l.mods||[]})),total:tot0,at:Date.now(),st:'new'});saveTK()}
+    if(tk){TK.unshift({id:ref.id,name:cn,phone:cph,note:note0,lines:lines.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods||[]})),total:tot0,at:Date.now(),st:'new',sts:{[ref.id]:'new'}});saveTK()}
     watchOrder(ref,lb);
     render();
   }catch(e){sending=false;err='No se pudo enviar. Revisa la conexión e intenta de nuevo.';render(true)}
@@ -239,9 +282,9 @@ function pickSheet(){
   <button class="big" onclick="pickOk()">${p.acct?'Guardar cambio':(p.ed!=null?'Guardar cambios':'Agregar')} ${fmt(price)}</button>${p.acct?'<button class="big" style="margin-top:8px;background:#c0392b" onclick="acctDel()">🗑 Quitar '+(p.acct.q>1?p.acct.q+' unidades':'este producto')+'</button>':''}</div></div>`;
 }
 function cartSheet(){
-  return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Pedido · ${table===TG?'🥡 Para llevar':esc(table)}</h3>
+  return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>${tkAdd?'Agregar al pedido de 🥡 '+esc(tkAdd.name):'Pedido · '+(table===TG?'🥡 Para llevar':esc(table))}</h3>
   ${cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div><div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
-  ${table===TG?`<div class="lbl">Nombre del cliente</div><input class="f" maxlength="60" placeholder="Nombre de quien recoge" value="${esc(cname)}" oninput="setCn(this.value)"><div class="lbl">Teléfono (opcional)</div><input class="f" type="tel" inputmode="tel" maxlength="20" placeholder="Ej: 3001234567" value="${esc(cphone)}" oninput="setCp(this.value)">`:''}
+  ${table===TG&&!tkAdd?`<div class="lbl">Nombre del cliente</div><input class="f" maxlength="60" placeholder="Nombre de quien recoge" value="${esc(cname)}" oninput="setCn(this.value)"><div class="lbl">Teléfono (opcional)</div><input class="f" type="tel" inputmode="tel" maxlength="20" placeholder="Ej: 3001234567" value="${esc(cphone)}" oninput="setCp(this.value)">`:''}
   <div class="lbl">Notas para cocina</div><textarea class="f" rows="2" maxlength="300" placeholder="Ej: todo para llevar, alergia a..." oninput="fld(this.value)">${esc(note)}</textarea>
   <div class="tot"><span>Total</span><span>${fmt(sub())}</span></div>
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
@@ -268,6 +311,17 @@ function render(keep){
     `;
     return;
   }
+  if(view==='tkacct'){
+    const x=TK.find(y=>y.id===tkCur);if(!x){view='tables';return render()}
+    const stt=TKST[tkStat(x)]||TKST.new;
+    el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>🥡 ${esc(x.name)}</h1>${themeBtn()}</div><div style="padding:0 16px 90px">
+    <p class="sec" style="padding:10px 0 0">${x.phone?'📞 '+esc(x.phone)+' · ':''}<b style="color:${stt[1]}">${stt[0]}</b></p>
+    ${x.lines.length?x.lines.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editTk(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${(l.mods||[]).length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt((l.price||0)*l.qty)} · ✎ Toca para modificar</span></div><div class="qty"><b>× ${l.qty}</b><button onclick="tkMinus(${i})" aria-label="Quitar uno" title="Quitar uno">−</button></div></div>`).join(''):'<p class="sec" style="padding:20px 0">El pedido no tiene productos.</p>'}
+    <div class="tot"><span>Total</span><span>${fmt(x.total||0)}</span></div>
+    <p class="sec">Toca un producto para cambiarlo (sin cebolla, adicionales…) o quitarlo. El − quita una unidad. Cocina recibe aviso de cada cambio.</p>
+    <button class="big" onclick="tkMore()">➕ Agregar más productos</button></div>`+(pick?pickSheet():'');
+    return;
+  }
   if(view==='acct'){
     const L=(ST[table]||{}).l||[],tot=L.reduce((s,l)=>s+l.p*l.q,0);
     el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>Cuenta · ${esc(table)}</h1>${themeBtn()}</div><div style="padding:0 16px 90px">
@@ -286,7 +340,7 @@ function render(keep){
     <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en el pedido · ✎ toca para modificar</span>`:''}</div><button class="add" ${out||!isOpen()?'disabled':''} onclick="event.stopPropagation();tapAdd(${i.id})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
   const side=`<nav class="side">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb${catName(c).length>10?' lg':''}">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Enviar a cocina (${count()})</span><span>${fmt(sub())}</span></button></div>`:'';
-  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${table===TG?'🥡 Para llevar':esc(table)}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
+  el.innerHTML=`<div class="topbar"><button onclick="${tkAdd?'tkBack()':'backTables()'}">← ${tkAdd?'Pedido':'Mesas'}</button><h1>${tkAdd?'🥡 '+esc(tkAdd.name):(table===TG?'🥡 Para llevar':esc(table))}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
   const s2=document.querySelector('.sh');if(s2&&st)s2.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
