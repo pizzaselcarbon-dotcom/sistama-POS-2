@@ -96,7 +96,7 @@ if(!FIREBASE_CONFIG||!FIREBASE_CONFIG.projectId||FIREBASE_CONFIG.projectId==='PE
 const db=getFirestore(initializeApp(FIREBASE_CONFIG));
 
 let C=null,items=[],mods=[],ST={},loaded={c:false,i:false};
-let view='tables',table=null,cart=[],carts={},ready={},sent={};
+let view='tables',table=null,cart=[],carts={},ready={},sent={};const TG='Para recoger';let cname='',cphone='';
 let catSel=null,catList=[],pick=null,cartOpen=false,sending=false,err='';
 let waiter=LS.get('w_name')||'',note='',pinOk=SS.get('w_pin')==='1',nameOk=SS.get('w_named')==='1'&&!!(LS.get('w_name')||'').trim();
 
@@ -126,6 +126,7 @@ function addLine(it,opts){
 }
 
 window.checkPin=async()=>{const v=($('#pin')||{}).value||'';try{if(await sha(v.trim())===C.mpin){SS.set('w_pin','1');pinOk=true;render()}else{$('#pe').textContent='PIN incorrecto';}}catch(e){$('#pe').textContent='Este navegador no permite verificar el PIN'}};
+window.setCn=v=>{cname=v};window.setCp=v=>{cphone=v};
 window.setName=v=>{waiter=v;LS.set('w_name',v)};
 window.confirmName=()=>{const v=(($('#wname')||{}).value||'').trim();if(v.length<2){const e=$('#we');if(e)e.textContent='Escribe tu nombre (mínimo 2 letras)';return}setName(v.slice(0,40));SS.set('w_named','1');nameOk=true;render()};
 window.openTable=name=>{
@@ -169,7 +170,7 @@ window.fld=v=>{note=v};
 function watchOrder(ref,tb){
   let nr=false,nc=false;
   onSnapshot(doc(db,'orders',ref.id),s=>{if(!s.exists())return;const st=s.data().status;
-    if(st==='ready'&&!nr){nr=true;ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo para servir',true);render()}
+    if(st==='ready'&&!nr){nr=true;if(ready)ready[tb]=true;beep();toast('🔔 '+tb+': pedido listo'+(tb.startsWith('🥡')?' para entregar':' para servir'),true);render()}
     if(st==='cancelled'&&!nc){nc=true;toast('❌ Pedido de '+tb+' cancelado')}},()=>{});
 }
 window.editAcct=i=>{
@@ -198,14 +199,16 @@ window.send=async()=>{
   if(sending)return;err='';
   if(!cart.length){err='Agrega productos al pedido.';return render(true)}
   if(!waiter.trim()){err='Escribe tu nombre (arriba, en la lista de mesas).';return render(true)}
+  if(table===TG&&cname.trim().length<2){err='Escribe el nombre del cliente.';return render(true)}
   sending=true;render(true);
   const tb=table,lines=cart.map(l=>({id:l.id,name:l.name,qty:l.qty,price:l.price,mods:l.mods,cat:l.cat||''}));
   try{
-    const ref=await addOrder({type:'mesa',table:tb,name:waiter.trim().slice(0,80),phone:'',address:'',note:note.trim().slice(0,300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
-    toast('✅ Enviado a cocina · '+tb,true);
-    cart=[];carts[tb]=[];note='';cartOpen=false;sending=false;view='tables';table=null;
-    sent[tb]=Date.now();
-    watchOrder(ref,tb);
+    const tk=tb===TG,cn=cname.trim().slice(0,60),lb=tk?'🥡 '+cn:tb;
+    const ref=await addOrder({type:'mesa',table:tb,name:tk?cn:waiter.trim().slice(0,80),phone:tk?cphone.replace(/[^\d+ ]/g,'').slice(0,20):'',address:'',note:(tk?('Meser@: '+waiter.trim().slice(0,40)+(note.trim()?' | ':'')):'')+note.trim().slice(0,tk?240:300),pay:'mesera',fee:0,lines,total:sub(),status:'new',createdAt:serverTimestamp()});
+    toast('✅ Enviado a cocina · '+lb,true);
+    cart=[];carts[tb]=[];note='';if(tk){cname='';cphone=''}cartOpen=false;sending=false;view='tables';table=null;
+    if(!tk)sent[tb]=Date.now();
+    watchOrder(ref,lb);
     render();
   }catch(e){sending=false;err='No se pudo enviar. Revisa la conexión e intenta de nuevo.';render(true)}
 };
@@ -225,8 +228,9 @@ function pickSheet(){
   <button class="big" onclick="pickOk()">${p.acct?'Guardar cambio':(p.ed!=null?'Guardar cambios':'Agregar')} ${fmt(price)}</button>${p.acct?'<button class="big" style="margin-top:8px;background:#c0392b" onclick="acctDel()">🗑 Quitar '+(p.acct.q>1?p.acct.q+' unidades':'este producto')+'</button>':''}</div></div>`;
 }
 function cartSheet(){
-  return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Pedido · ${esc(table)}</h3>
+  return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>Pedido · ${table===TG?'🥡 Para llevar':esc(table)}</h3>
   ${cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div><div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
+  ${table===TG?`<div class="lbl">Nombre del cliente</div><input class="f" maxlength="60" placeholder="Nombre de quien recoge" value="${esc(cname)}" oninput="setCn(this.value)"><div class="lbl">Teléfono (opcional)</div><input class="f" type="tel" inputmode="tel" maxlength="20" placeholder="Ej: 3001234567" value="${esc(cphone)}" oninput="setCp(this.value)">`:''}
   <div class="lbl">Notas para cocina</div><textarea class="f" rows="2" maxlength="300" placeholder="Ej: todo para llevar, alergia a..." oninput="fld(this.value)">${esc(note)}</textarea>
   <div class="tot"><span>Total</span><span>${fmt(sub())}</span></div>
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
@@ -247,6 +251,8 @@ function render(keep){
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
+    <div class="lbl" style="margin:8px 16px 0">Para llevar</div>
+    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para llevar</b><span class="ch">Nuevo pedido</span><span class="sub">Toca para tomar pedido para recoger</span></button></div>
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}
     `;
     return;
@@ -269,7 +275,7 @@ function render(keep){
     <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en el pedido · ✎ toca para modificar</span>`:''}</div><button class="add" ${out||!isOpen()?'disabled':''} onclick="event.stopPropagation();tapAdd(${i.id})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
   const side=`<nav class="side">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb${catName(c).length>10?' lg':''}">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Enviar a cocina (${count()})</span><span>${fmt(sub())}</span></button></div>`:'';
-  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${esc(table)}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
+  el.innerHTML=`<div class="topbar"><button onclick="backTables()">← Mesas</button><h1>${table===TG?'🥡 Para llevar':esc(table)}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
   const s2=document.querySelector('.sh');if(s2&&st)s2.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
