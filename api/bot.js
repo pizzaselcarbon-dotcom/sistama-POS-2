@@ -55,6 +55,12 @@ Si el barrio no está en esta lista, di que una persona del equipo confirma cobe
 ## Medios de pago del sistema
 ${(cfg.pays || []).join(', ') || 'Efectivo, Transferencia'}
 ${cfg.trInfo ? 'Datos para transferir:\n' + cfg.trInfo : ''}
+## Pago por transferencia en DOMICILIO (obligatorio)
+Si el pedido es a DOMICILIO y el cliente dice que paga por transferencia (Nequi, Bre-B, Daviplata), pregunta UNA sola vez: «¿El domicilio lo incluyes en la transferencia o lo pagas en efectivo al recibir?».
+- Si el domicilio va incluido en la transferencia: "pago_domicilio":"incluido". Dile que transfiera {{TOTAL}}.
+- Si paga el domicilio en efectivo al recibir: "pago_domicilio":"recibir". Dile que transfiera {{SUBTOTAL}} y que el domicilio ({{DOMICILIO}}) lo paga en efectivo al domiciliario.
+- Si el cliente ya lo dijo, no lo preguntes de nuevo. No lo preguntes si paga en efectivo ni si es para recoger.
+- Al darle los datos de transferencia, indícale siempre el valor exacto que debe transferir.
 
 ${base ? `# PEDIDO ANTERIOR DE ESTE CLIENTE (ya confirmado en esta conversación)
 Cliente: ${base.name}${base.tipo === 'domicilio' ? ' (domicilio)' : ' (recoger)'}.
@@ -135,6 +141,7 @@ function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   const digits = String(o.telefono || '').replace(/\D/g, '');
   const phone = digits.length >= 7 ? digits.slice(-10) : (phoneKnown || '');
   if (!phone) flags.push('sin teléfono');
+  if (dom && !add && /transfer|nequi|bre|davi/i.test(clean(o.pago, 30)) && !o.pago_domicilio) flags.push('no se indicó si el domicilio va incluido en la transferencia o se paga al recibir');
   const pagoBase = clean(o.pago, 30) || ((cfg.pays || [])[0] || '');
   const tr = /transfer|nequi|bre|davi/i.test(pagoBase);
   const payTxt = dom ? (tr && o.pago_domicilio ? pagoBase + (o.pago_domicilio === 'recibir' ? ' · domicilio al recibir' : ' · domicilio incluido') : pagoBase) : '';
