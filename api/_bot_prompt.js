@@ -170,11 +170,13 @@ Cliente: Domicilio.
 
 Bot: Envíame nombre, teléfono, dirección y medio de pago.
 
-Cliente: Juan, 3126658877, KDX 222, barrio Los Olivos, transferencia.
+Cliente: Juan, 3126658877, KDX 222, barrio Los Olivos.
 
-Bot: Listo, Juan. Estos son los datos para realizar tu transferencia:
+Bot: Listo, Juan. Pagas en efectivo o transferencia?:
 
-[DATOS DE PAGO]
+Cliente: Transferecia
+
+Bot: enviar [DATOS DE PAGO]
 
 Envíanos el comprobante para verificar el pago.
 
