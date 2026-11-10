@@ -72,8 +72,10 @@ Si el teléfono del cliente figura como NO CONOCIDO, debes pedírselo (para domi
 
 # FORMATO DE RESPUESTA (obligatorio)
 Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
-{"reply": "mensaje para el cliente", "order": null}
+{"reply": "mensaje para el cliente", "carrito": null, "order": null}
 - "reply" sigue todas las reglas de conversación y estilo anteriores (breve, una pregunta por mensaje).
+- TOTALES: NUNCA calcules ni escribas cantidades de dinero de totales. Donde necesites decir el subtotal, el domicilio o el total, escribe exactamente {{SUBTOTAL}}, {{DOMICILIO}} o {{TOTAL}} y el sistema pondrá el valor correcto. Solo puedes escribir precios unitarios que estén en el catálogo.
+- CARRITO: en CADA respuesta incluye además "carrito" con TODO lo que el cliente lleva pedido hasta ahora en el pedido nuevo: {"tipo":"domicilio"|"recoger"|"","barrio":"(exacto de la lista, si ya lo sabes)","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["..."]}]}. Si todavía no ha pedido nada, "carrito" es null. Si es una adición a un pedido anterior, "carrito" lleva SOLO los productos nuevos y "tipo":"adicion".
 - "order" es null en todos los mensajes, EXCEPTO en el mensaje en que el cliente CONFIRMA el resumen final (dice sí, confirmo, dale, etc.). En ese mensaje "reply" debe ser solo "Pedido confirmado." y "order" lleva:
 {"tipo":"domicilio"|"recoger"|"adicion"|"cambio","nombre":"","telefono":"","direccion":"","barrio":"(exacto de la lista)","pago":"(uno de los medios de pago)","pago_domicilio":"recibir"|"incluido"|"","nota":"","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["nombres de opciones del catálogo"],"nota":"cambios libres, p. ej. sin cebolla","unidades_con_cambio":<opcional>}]}
 - Los cambios como "sin cebolla" van en "opciones" si coinciden con una opción del catálogo; si no, en la "nota" de la línea.
@@ -97,7 +99,7 @@ async function openai(messages) {
 }
 
 function parseModel(raw) {
-  try { const j = JSON.parse(raw); return { reply: clean(j.reply, 1500), order: j.order && typeof j.order === 'object' ? j.order : null }; }
+  try { const j = JSON.parse(raw); return { reply: clean(j.reply, 1500), order: j.order && typeof j.order === 'object' ? j.order : null, carrito: j.carrito && typeof j.carrito === 'object' ? j.carrito : null }; }
   catch (e) { return { reply: clean(String(raw).replace(/[{}"]/g, ''), 600), order: null }; }
 }
 
@@ -146,6 +148,24 @@ function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   };
 }
 
+// Calcula subtotal, domicilio y total con los precios del catálogo (no confía en las cuentas del modelo)
+function calcCart(c, cfg, items) {
+  if (!c || !Array.isArray(c.lineas) || !c.lineas.length) return null;
+  const dom = norm(c.tipo).startsWith('dom');
+  const d = buildOrder({ tipo: dom ? 'domicilio' : 'recoger', barrio: c.barrio, direccion: 'x', telefono: '0000000', lineas: c.lineas }, cfg, items, '0000000', 'x');
+  if (!d.lines.length || d.lines.some(l => String(l.id).startsWith('x'))) return null;
+  return { total: d.total, fee: d.fee };
+}
+function applyTotals(text, calc) {
+  let t = String(text);
+  if (calc) {
+    t = t.replace(/\{\{\s*SUBTOTAL\s*\}\}/gi, money(calc.total - calc.fee)).replace(/\{\{\s*DOMICILIO\s*\}\}/gi, money(calc.fee)).replace(/\{\{\s*TOTAL\s*\}\}/gi, money(calc.total));
+    // respaldo: si el modelo escribió el total a mano, se corrige con el valor real
+    t = t.replace(/(^|[^a-záéíóúñ])(total\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total));
+  }
+  return t.replace(/\{\{[^}]*\}\}/g, '').replace(/[ \t]+\n/g, '\n');
+}
+
 function subtractLines(lineas, bl) {
   const have = {}; bl.forEach(l => { have[l.id] = (have[l.id] || 0) + l.qty; });
   return lineas.map(l => { const q = Math.max(1, Math.floor(+l.qty) || 1), h = have[l.id] || 0, use = Math.min(h, q); have[l.id] = h - use; return use >= q ? null : Object.assign({}, l, { qty: q - use, unidades_con_cambio: undefined }); }).filter(Boolean);
@@ -168,6 +188,36 @@ function buildChange(o, base, sender) {
     lines: [{ id: 'cambio', name: '⚠ CAMBIO: ' + txt, qty: 1, price: 0, mods: [], cat: '' }],
     total: 0, status: 'new', source: 'whatsapp', createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
+}
+
+// ---- horario de atención (hora de Colombia) ----
+const DN = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const hm = t => { const [h, m] = String(t || '0:0').split(':'); return (+h || 0) * 60 + (+m || 0); };
+const t12 = t => { const x = hm(t), h = Math.floor(x / 60) % 24, m = x % 60; return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + ' ' + (h < 12 ? 'a. m.' : 'p. m.'); };
+function nowCO() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Bogota', weekday: 'short', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return { d: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday), m: (+p.hour) * 60 + (+p.minute) };
+}
+function hrOn(cfg) { return !!(cfg && cfg.hr && cfg.hr.on && Array.isArray(cfg.hr.d)); }
+function inHours(cfg) {
+  if (!hrOn(cfg)) return true;
+  const hr = cfg.hr, n = nowCO(), c = hr.d[n.d], p = hr.d[(n.d + 6) % 7];
+  if (c && c.o) { const a = hm(c.a), z = hm(c.c); if (a === z || (a < z ? (n.m >= a && n.m < z) : n.m >= a)) return true; }
+  if (p && p.o) { const a = hm(p.a), z = hm(p.c); if (a > z && n.m < z) return true; }
+  return false;
+}
+function scheduleText(cfg) {
+  if (!hrOn(cfg)) return '';
+  const lab = i => { const d = cfg.hr.d[i] || {}; return d.o ? t12(d.a) + ' – ' + t12(d.c) : 'Cerrado'; };
+  const order = [1, 2, 3, 4, 5, 6, 0], runs = [];
+  order.forEach(i => { const l = lab(i), last = runs[runs.length - 1]; if (last && last.l === l) last.e = i; else runs.push({ s: i, e: i, l }); });
+  return runs.map(r => (r.s === r.e ? DN[r.s] : DN[r.s] + ' a ' + DN[r.e]) + ': ' + r.l).join('\n');
+}
+function closedText(cfg) {
+  const sch = scheduleText(cfg), byHours = !inHours(cfg);
+  return '¡Hola! 👋 ' + (byHours ? 'Por ahora estamos *CERRADOS* 🔒.' : 'Hoy no estamos recibiendo pedidos por este medio.') +
+    (sch ? '\n\n🕒 *Horario de atención:*\n' + sch + '\n\nEscríbenos en ese horario y con gusto te atendemos 😊' : '') +
+    (cfg.closedMsg ? '\n\n' + String(cfg.closedMsg).slice(0, 300) : '');
 }
 
 module.exports = async (req, res) => {
@@ -203,14 +253,19 @@ module.exports = async (req, res) => {
       }
     }
 
+    // Fuera de horario (o cerrado a mano): responder CERRADO sin gastar IA, salvo que el cliente ya tenga un pedido abierto
+    if ((cfg.open === false || !inHours(cfg)) && !(base && base.open)) return res.status(200).json({ replies: [{ message: closedText(cfg), delay: 1 }] });
+
     const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base) },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
-    let { reply, order } = parseModel(raw);
+    let { reply, order, carrito } = parseModel(raw);
     let out = reply || 'Un momento, por favor.';
+    // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
+    out = applyTotals(out, calcCart(order && order.lineas ? order : carrito, cfg, items));
     let orderId = null;
 
     let info = null, addInfo = null;
-    if (order && cfg.open === false) out = 'Por ahora estamos cerrados. Nuestro horario es de 5 pm a 10 pm. ¡Te esperamos!';
+    if (order && cfg.open === false) out = closedText(cfg);
     else if (order) {
       let kind = norm(order.tipo), warn = false;
       const bl = base ? base.lines : [];
