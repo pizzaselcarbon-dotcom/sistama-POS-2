@@ -1,6 +1,6 @@
 // Chatbot de WhatsApp para AutoResponder.ai (webhook).
 // AutoResponder envía cada mensaje aquí; respondemos con OpenAI usando el menú real del POS
-// y, cuando el cliente entrega los datos finales, creamos el pedido en Firestore (llega al POS como los demás pedidos online).
+// y, cuando el cliente confirma, creamos el pedido en Firestore (llega al POS como los demás pedidos online).
 //
 // Variables en Vercel: OPENAI_API_KEY, BOT_SECRET, FIREBASE_SERVICE_ACCOUNT  (opcional: OPENAI_MODEL)
 // URL para AutoResponder:  https://TU-DOMINIO.vercel.app/api/bot?k=TU_BOT_SECRET
@@ -74,11 +74,11 @@ Si el teléfono del cliente figura como NO CONOCIDO, debes pedírselo (para domi
 Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
 {"reply": "mensaje para el cliente", "order": null}
 - "reply" sigue todas las reglas de conversación y estilo anteriores (breve, una pregunta por mensaje).
-- "order" es null en todos los mensajes, EXCEPTO en el mensaje en que el cliente entrega los últimos datos que faltan para un pedido NUEVO (nombre, teléfono, dirección y barrio si es domicilio, y medio de pago). Ya NO hay paso de confirmación: en ese mismo mensaje registras el pedido, y "reply" lleva el primer mensaje de pago (si es transferencia) y el resumen final, separados por la marca [[CORTE]] exactamente como indican las reglas de conversación. Para adiciones y cambios sobre un pedido anterior se sigue lo indicado en el bloque PEDIDO ANTERIOR. En ese mensaje "order" lleva:
+- "order" es null en todos los mensajes, EXCEPTO en el mensaje en que el cliente CONFIRMA el resumen final (dice sí, confirmo, dale, etc.). En ese mensaje "reply" debe ser solo "Pedido confirmado." y "order" lleva:
 {"tipo":"domicilio"|"recoger"|"adicion"|"cambio","nombre":"","telefono":"","direccion":"","barrio":"(exacto de la lista)","pago":"(uno de los medios de pago)","pago_domicilio":"recibir"|"incluido"|"","nota":"","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["nombres de opciones del catálogo"],"nota":"cambios libres, p. ej. sin cebolla","unidades_con_cambio":<opcional>}]}
 - Los cambios como "sin cebolla" van en "opciones" si coinciden con una opción del catálogo; si no, en la "nota" de la línea.
 - "qty" es el total de unidades de ese producto. "opciones"/"nota" son el cambio. Si el cambio aplica solo a ALGUNAS unidades, pon en "unidades_con_cambio" cuántas lo llevan (ej.: 3 perros y 1 sin cebolla → qty 3, opciones ["Sin cebolla"], unidades_con_cambio 1). Si aplica a todas, omite "unidades_con_cambio". Si cada unidad lleva un cambio distinto, usa una línea por cada cambio.
-- No incluyas "order" antes de tener todos los datos del pedido nuevo.`;
+- No incluyas "order" antes de que el cliente confirme.`;
 }
 
 async function openai(messages) {
@@ -195,7 +195,7 @@ function scheduleText(cfg) {
 }
 function closedText(cfg) {
   const sch = scheduleText(cfg), byHours = !inHours(cfg);
-  return '¡Hola!' + (byHours ? 'Por ahora estamos *CERRADOS* 🔒.' : 'Hoy no estamos recibiendo pedidos por este medio.') +
+  return '🔒 ' + (byHours ? 'Por ahora estamos *CERRADOS*.' : 'Hoy no estamos recibiendo pedidos por este medio.') +
     (sch ? '\n\n🕒 *Horario de atención:*\n' + sch + '\n\nEscríbenos en ese horario y con gusto te atendemos 😊' : '') +
     (cfg.closedMsg ? '\n\n' + String(cfg.closedMsg).slice(0, 300) : '');
 }
@@ -278,14 +278,12 @@ module.exports = async (req, res) => {
         }
       }
     }
-    const parts = String(out).split(/\s*\[\[CORTE\]\]\s*/).map(x => x.trim()).filter(Boolean);
-    out = parts.join('\n\n') || out;
     const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
     const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 };
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
-    return res.status(200).json({ replies: (parts.length ? parts : [out]).map((m, i) => i ? { message: m, delay: 2 } : { message: m }) });
+    return res.status(200).json({ replies: [{ message: out }] });
   } catch (e) {
     console.error('bot', e && e.message);
     return res.status(200).json({ replies: [{ message: 'Disculpa, tuve un problema. Un momento, ya te ayuda una persona del equipo.' }] });
