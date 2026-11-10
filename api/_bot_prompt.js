@@ -192,6 +192,8 @@ TOTAL: $23.000
 
 Continúa con los datos necesarios para completar el pedido.
 
+¿Deseas CONFIRMAR el pedido?
+
 ## 5. DOMICILIOS
 
 Tarifas únicamente para Ocaña:
