@@ -195,7 +195,7 @@ function scheduleText(cfg) {
 }
 function closedText(cfg) {
   const sch = scheduleText(cfg), byHours = !inHours(cfg);
-  return '¡Hola! 👋 ' + (byHours ? 'Por ahora estamos *CERRADOS* 🔒.' : 'Hoy no estamos recibiendo pedidos por este medio.') +
+  return '¡Hola!' + (byHours ? 'Por ahora estamos *CERRADOS* 🔒.' : 'Hoy no estamos recibiendo pedidos por este medio.') +
     (sch ? '\n\n🕒 *Horario de atención:*\n' + sch + '\n\nEscríbenos en ese horario y con gusto te atendemos 😊' : '') +
     (cfg.closedMsg ? '\n\n' + String(cfg.closedMsg).slice(0, 300) : '');
 }
