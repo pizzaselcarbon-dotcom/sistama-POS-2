@@ -8,6 +8,8 @@ const admin = require('firebase-admin');
 const crypto = require('crypto');
 const BASE_PROMPT = require('./_bot_prompt');
 
+const STATUS_Q = /(cu[aá]nto\s+(se\s+)?(demora|falta|tarda|van|llega)|se\s+demor|demor[ao]n?|tard[ao]n?|ya\s+(viene|sali[oó]|va|llega|est[aá])|d[oó]nde\s+(est[aá]|va|viene)|qu[eé]\s+(pas[oó]|hay)\s+con\s+(mi|el)\s+pedido|c[oó]mo\s+va\s+(mi|el)\s+pedido|mi\s+pedido\s*\?|estado\s+(de\s+)?(mi|del)\s+pedido)/i;
+const ORDER_WORDS = /(quiero|agrega|a[ñn]ade|cambia|quita|cancela|pedir|me\s+(das|regalas|env[ií]as)\s+\d)/i;
 function getDb() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
   return admin.firestore();
@@ -259,6 +261,21 @@ module.exports = async (req, res) => {
         let st = '', sum = '';
         try { const bs = await db.collection('orders').doc(prev.lastOrder).get(); if (bs.exists) { const b = bs.data(); st = b.status; sum = (b.lines || []).map(l => l.qty + ' ' + l.name + ((l.mods || []).length ? ' (' + l.mods.join(', ') + ')' : '')).join(', '); } } catch (e) {}
         base = Object.assign({}, prev.lastInfo, { lines: Array.isArray(prev.lastInfo.lines) ? prev.lastInfo.lines : [], summary: sum || '(sin detalle)', st, mins: Math.max(0, Math.round((Date.now() - (prev.lastAt || Date.now())) / 60000)), open: (st === 'new' || st === 'received') && Date.now() - (prev.lastAt || 0) < 3 * 3600e3 });
+      }
+    }
+
+    // Pregunta por el estado / demora de su pedido: se responde con el estado REAL del sistema, sin depender de la IA
+    if (base && base.st && STATUS_Q.test(text) && !ORDER_WORDS.test(text)) {
+      const m = base.mins, dom = base.tipo === 'domicilio';
+      const out = {
+        new: 'Tu pedido fue recibido hace ' + m + ' min y está en la cola de la cocina 🙌. Apenas empiecen a prepararlo seguimos avanzando. ¡Gracias por tu paciencia! 🙏',
+        received: 'Tu pedido está en preparación en este momento 👨‍🍳 (lo recibimos hace ' + m + ' min). Cuando esté listo ' + (dom ? 'sale de inmediato con el domiciliario' : 'te avisamos para que pases a recogerlo') + '. ¡Gracias por tu paciencia! 🙏',
+        ready: dom ? 'Tu pedido está listo, estamos esperando al domiciliario 🛵. ¡Gracias por tu paciencia! 🙏' : 'Tu pedido ya está listo para recoger 🍔. ¡Te esperamos!',
+        cancelled: 'Tu pedido aparece como cancelado. Si no fue lo que querías, escríbeme y te ayudo a hacerlo de nuevo.'
+      }[base.st];
+      if (out) {
+        await ref.set({ msgs: msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30), at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 });
+        return res.status(200).json({ replies: [{ message: out }] });
       }
     }
 
