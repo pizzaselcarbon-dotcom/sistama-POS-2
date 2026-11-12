@@ -369,7 +369,7 @@ module.exports = async (req, res) => {
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
-    await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'a', t: out }], save.lastOrder);
+    await mirrorChat(db, key, sender, phoneKnown || (save.lastInfo && save.lastInfo.phone) || '', q, [{ r: 'a', t: out }], save.lastOrder);
     return res.status(200).json({ replies: [{ message: out }] });
   } catch (e) {
     console.error('bot', e && e.message);
