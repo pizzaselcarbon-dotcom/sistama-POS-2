@@ -260,6 +260,31 @@ module.exports = async (req, res) => {
     const key = crypto.createHash('sha1').update(sender).digest('hex').slice(0, 24);
     const ref = db.collection('bot_chats').doc(key);
     const snap = await ref.get();
+    // El cliente ya hizo el pedido en la página y además lo manda por WhatsApp ("*Nuevo pedido a domicilio* #AB12"):
+    // no se crea otro pedido; se busca el que ya está en cocina y se le confirma.
+    const mp = text.match(/Nuevo pedido\s+(a domicilio|para recoger)[^#]{0,5}\*?\s*#\s*([A-Za-z0-9]{4})\b/i);
+    if (mp) {
+      const code = mp[2].toUpperCase(), isDom = /domicilio/i.test(mp[1]);
+      let od = null, oid = '';
+      try {
+        const qs = await db.collection('orders').orderBy('createdAt', 'desc').limit(120).get();
+        qs.forEach(d => { if (!od && d.id.slice(-4).toUpperCase() === code) { od = d.data(); oid = d.id; } });
+      } catch (e) { console.error('buscar pedido', e && e.message); }
+      let out;
+      if (od && od.status !== 'cancelled') {
+        const fn = String(od.name || '').trim().split(/\s+/)[0];
+        const nm = fn ? fn[0].toUpperCase() + fn.slice(1).toLowerCase() : '';
+        const dom = od.type === 'domicilio' || isDom;
+        out = od.status === 'ready'
+          ? '¡Hola' + (nm ? ' ' + nm : '') + '! 👋 Tu pedido #' + code + ' ya está listo ' + (dom ? 'y estamos esperando al domiciliario 🛵' : 'para recoger 🍔') + '. ¡Gracias!'
+          : '¡Hola' + (nm ? ' ' + nm : '') + '! 👋 Tu pedido #' + code + ' ya está en cocina 👨‍🍳. Total: ' + money(od.total) + '. ' + (dom ? 'Te avisamos cuando salga con el domiciliario.' : 'Te avisamos cuando esté listo para recoger.') + ' ¡Gracias!';
+        const info = { tipo: dom ? 'domicilio' : 'recoger', name: clean(od.name, 80), phone: clean(od.phone, 30), address: clean(od.address, 200), zone: dom ? clean(od.table, 60) : '', pago: clean(od.pay, 30), lines: Array.isArray(od.lines) ? od.lines : [] };
+        const hist0 = (snap.exists && Array.isArray(snap.data().msgs) ? snap.data().msgs : []).concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
+        await ref.set({ msgs: hist0, at: Date.now(), lastOrder: oid, lastInfo: info, lastAt: Date.now() });
+        await mirrorChat(db, key, sender, phoneKnown, q, hist0, oid);
+      } else out = od ? 'Ese pedido aparece como cancelado. Si quieres, dime qué deseas pedir y te ayudo.' : 'Recibí tu mensaje 🙌 Estamos verificando tu pedido #' + code + ', un momento por favor.';
+      return res.status(200).json({ replies: [{ message: out }] });
+    }
     let msgs = [], base = null;
     const prev = snap.exists ? snap.data() : {};
     if (snap.exists && Date.now() - (prev.at || 0) < 8 * 3600e3) {
