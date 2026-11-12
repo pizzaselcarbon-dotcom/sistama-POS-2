@@ -10,6 +10,13 @@ const BASE_PROMPT = require('./_bot_prompt');
 
 const STATUS_Q = /(cu[aá]nto\s+(se\s+)?(demora|falta|tarda|van|llega)|se\s+demor|demor[ao]n?|tard[ao]n?|ya\s+(viene|sali[oó]|va|llega|est[aá])|d[oó]nde\s+(est[aá]|va|viene)|qu[eé]\s+(pas[oó]|hay)\s+con\s+(mi|el)\s+pedido|c[oó]mo\s+va\s+(mi|el)\s+pedido|mi\s+pedido\s*\?|estado\s+(de\s+)?(mi|del)\s+pedido)/i;
 const ORDER_WORDS = /(quiero|agrega|a[ñn]ade|cambia|quita|cancela|pedir|me\s+(das|regalas|env[ií]as)\s+\d)/i;
+// Copia de la conversación para que el POS la muestre (colección pos_*, solo legible con sesión del dueño)
+async function mirrorChat(db, key, sender, phone, q, msgs, lastOrder) {
+  try {
+    const nm = clean(q.name || q.senderName || q.pushname || '', 60);
+    await db.collection('pos_wachats').doc(key).set({ sender: clean(sender, 60), phone: phone || '', name: nm, msgs: msgs.map(m => ({ r: m.r, t: String(m.t).slice(0, 1500) })), at: Date.now(), lastOrder: lastOrder || '' });
+  } catch (e) { console.error('mirror', e && e.message); }
+}
 function getDb() {
   if (!admin.apps.length) admin.initializeApp({ credential: admin.credential.cert(JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)) });
   return admin.firestore();
@@ -275,6 +282,7 @@ module.exports = async (req, res) => {
       }[base.st];
       if (out) {
         await ref.set({ msgs: msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30), at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 });
+        await mirrorChat(db, key, sender, phoneKnown, q, msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30), prev.lastOrder);
         return res.status(200).json({ replies: [{ message: out }] });
       }
     }
@@ -331,6 +339,7 @@ module.exports = async (req, res) => {
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
+    await mirrorChat(db, key, sender, phoneKnown, q, hist, save.lastOrder);
     return res.status(200).json({ replies: [{ message: out }] });
   } catch (e) {
     console.error('bot', e && e.message);
