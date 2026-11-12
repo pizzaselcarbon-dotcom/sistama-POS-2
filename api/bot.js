@@ -11,10 +11,14 @@ const BASE_PROMPT = require('./_bot_prompt');
 const STATUS_Q = /(cu[aá]nto\s+(se\s+)?(demora|falta|tarda|van|llega)|se\s+demor|demor[ao]n?|tard[ao]n?|ya\s+(viene|sali[oó]|va|llega|est[aá])|d[oó]nde\s+(est[aá]|va|viene)|qu[eé]\s+(pas[oó]|hay)\s+con\s+(mi|el)\s+pedido|c[oó]mo\s+va\s+(mi|el)\s+pedido|mi\s+pedido\s*\?|estado\s+(de\s+)?(mi|del)\s+pedido)/i;
 const ORDER_WORDS = /(quiero|agrega|a[ñn]ade|cambia|quita|cancela|pedir|me\s+(das|regalas|env[ií]as)\s+\d)/i;
 // Copia de la conversación para que el POS la muestre (colección pos_*, solo legible con sesión del dueño)
-async function mirrorChat(db, key, sender, phone, q, msgs, lastOrder) {
+async function mirrorChat(db, key, sender, phone, q, add, lastOrder) {
   try {
-    const nm = clean(q.name || q.senderName || q.pushname || '', 60);
-    await db.collection('pos_wachats').doc(key).set({ sender: clean(sender, 60), phone: phone || '', name: nm, msgs: msgs.map(m => ({ r: m.r, t: String(m.t).slice(0, 1500) })), at: Date.now(), lastOrder: lastOrder || '' });
+    const ref = db.collection('pos_wachats').doc(key);
+    const ex = await ref.get();
+    const old = ex.exists && ex.data() && Array.isArray(ex.data().msgs) ? ex.data().msgs : [];
+    const nm = clean(q.name || q.senderName || q.pushname || '', 60) || (ex.exists && ex.data().name) || '';
+    const msgs = old.concat(add.map(m => ({ r: m.r, t: String(m.t).slice(0, 1500) }))).slice(-60);
+    await ref.set({ sender: clean(sender, 60), phone: phone || (ex.exists && ex.data().phone) || '', name: nm, msgs, at: Date.now(), lastOrder: lastOrder || (ex.exists && ex.data().lastOrder) || '' });
   } catch (e) { console.error('mirror', e && e.message); }
 }
 function getDb() {
@@ -262,6 +266,7 @@ module.exports = async (req, res) => {
     const snap = await ref.get();
     // El cliente ya hizo el pedido en la página y además lo manda por WhatsApp ("*Nuevo pedido a domicilio* #AB12"):
     // no se crea otro pedido; se busca el que ya está en cocina y se le confirma.
+    await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'u', t: text }], '');
     const mp = text.match(/Nuevo pedido\s+(a domicilio|para recoger)[^#]{0,5}\*?\s*#\s*([A-Za-z0-9]{4})\b/i);
     if (mp) {
       const code = mp[2].toUpperCase(), isDom = /domicilio/i.test(mp[1]);
@@ -281,7 +286,7 @@ module.exports = async (req, res) => {
         const info = { tipo: dom ? 'domicilio' : 'recoger', name: clean(od.name, 80), phone: clean(od.phone, 30), address: clean(od.address, 200), zone: dom ? clean(od.table, 60) : '', pago: clean(od.pay, 30), lines: Array.isArray(od.lines) ? od.lines : [] };
         const hist0 = (snap.exists && Array.isArray(snap.data().msgs) ? snap.data().msgs : []).concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
         await ref.set({ msgs: hist0, at: Date.now(), lastOrder: oid, lastInfo: info, lastAt: Date.now() });
-        await mirrorChat(db, key, sender, phoneKnown, q, hist0, oid);
+        await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'a', t: out }], oid);
       } else out = od ? 'Ese pedido aparece como cancelado. Si quieres, dime qué deseas pedir y te ayudo.' : 'Recibí tu mensaje 🙌 Estamos verificando tu pedido #' + code + ', un momento por favor.';
       return res.status(200).json({ replies: [{ message: out }] });
     }
@@ -307,7 +312,7 @@ module.exports = async (req, res) => {
       }[base.st];
       if (out) {
         await ref.set({ msgs: msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30), at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 });
-        await mirrorChat(db, key, sender, phoneKnown, q, msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30), prev.lastOrder);
+        await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'a', t: out }], prev.lastOrder);
         return res.status(200).json({ replies: [{ message: out }] });
       }
     }
@@ -364,7 +369,7 @@ module.exports = async (req, res) => {
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
-    await mirrorChat(db, key, sender, phoneKnown, q, hist, save.lastOrder);
+    await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'a', t: out }], save.lastOrder);
     return res.status(200).json({ replies: [{ message: out }] });
   } catch (e) {
     console.error('bot', e && e.message);
