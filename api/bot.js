@@ -66,7 +66,9 @@ ${base ? `# PEDIDO ANTERIOR DE ESTE CLIENTE (ya confirmado en esta conversación
 Cliente: ${base.name}${base.tipo === 'domicilio' ? ' (domicilio)' : ' (recoger)'}.
 Productos (con su id del catálogo): ${base.lines && base.lines.length ? base.lines.map(l => `[${l.id}] ${l.name} x${l.qty}`).join(', ') : base.summary}
 Estado: ${base.open ? 'EN PREPARACIÓN (todavía se puede agregar o cambiar algo)' : 'YA NO SE PUEDE MODIFICAR (está listo, ya salió o se cerró)'}.
+Estado real en el sistema (dato en vivo): ${{ new: 'RECIBIDO, la cocina aún no lo ha empezado a preparar', received: 'EN COCINA, se está preparando', ready: base.tipo === 'domicilio' ? 'LISTO, ya salió o está por salir con el domiciliario' : 'LISTO PARA RECOGER', cancelled: 'CANCELADO' }[base.st] || 'sin información'}. El pedido se registró hace ${base.mins} minutos.
 La conversación sigue abierta. Reglas para mensajes posteriores:
+- Si el cliente pregunta por su pedido ("¿ya viene?", "¿cuánto falta?", "se demora", "¿qué pasó con mi pedido?"): responde con el estado real de arriba, en una o dos frases amables, sin inventar tiempos exactos. Si está RECIBIDO o EN COCINA, dile que ya lo estamos preparando y agradece la paciencia (usa los tiempos de demora del prompt solo si ya los conoces). Si está LISTO y es domicilio, dile que ya va en camino; si es para recoger, que puede pasar por él. Si está CANCELADO, avisa y ofrécele ayuda. Si lleva mucho más tiempo del normal, discúlpate y dile que se lo avisas a una persona del equipo. No envíes "order" en estos casos.
 - Si el cliente quiere AGREGAR algo y el pedido está en preparación: toma solo lo nuevo (con la misma regla de no repetir lo ya pedido), ofrécele lo que falte (bebida, adicionales) solo si es útil, y al final muestra un resumen corto SOLO de lo agregado y pide confirmación. Cuando confirme, responde «Listo, lo agregué a tu pedido.» y envía "order" con "tipo":"adicion" y solo las líneas nuevas (no pidas nombre, teléfono, dirección ni pago otra vez: ya los tienes).
 - Si quiere CAMBIAR o QUITAR algo del pedido anterior y está en preparación: confirma el cambio con una frase corta y envía "order" con "tipo":"cambio" y en "nota" la descripción exacta del cambio (con el nombre del producto afectado). Responde «Listo, avisamos a cocina del cambio.»
 - Si el pedido ya no se puede modificar: explica amablemente que ya salió o está listo y ofrécele hacer un pedido nuevo (se pide todo como un pedido nuevo, con "tipo":"domicilio" o "recoger", incluyendo solo lo del pedido nuevo).
@@ -256,7 +258,7 @@ module.exports = async (req, res) => {
       if (prev.lastOrder && prev.lastInfo) {
         let st = '', sum = '';
         try { const bs = await db.collection('orders').doc(prev.lastOrder).get(); if (bs.exists) { const b = bs.data(); st = b.status; sum = (b.lines || []).map(l => l.qty + ' ' + l.name + ((l.mods || []).length ? ' (' + l.mods.join(', ') + ')' : '')).join(', '); } } catch (e) {}
-        base = Object.assign({}, prev.lastInfo, { lines: Array.isArray(prev.lastInfo.lines) ? prev.lastInfo.lines : [], summary: sum || '(sin detalle)', open: (st === 'new' || st === 'received') && Date.now() - (prev.lastAt || 0) < 3 * 3600e3 });
+        base = Object.assign({}, prev.lastInfo, { lines: Array.isArray(prev.lastInfo.lines) ? prev.lastInfo.lines : [], summary: sum || '(sin detalle)', st, mins: Math.max(0, Math.round((Date.now() - (prev.lastAt || Date.now())) / 60000)), open: (st === 'new' || st === 'received') && Date.now() - (prev.lastAt || 0) < 3 * 3600e3 });
       }
     }
 
