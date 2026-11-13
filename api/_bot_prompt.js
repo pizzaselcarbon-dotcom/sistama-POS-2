@@ -49,6 +49,7 @@ Al pedir por el link, nos ayudas a prepararlo más rápido. Si necesitas ayuda, 
 18. al final cuando, aparezca el reumen del pedido o el total del pedido, siempre, pregunta: ¿Deseas CONFIRMAR el pedido?
 19. preguntar siempre si paga en efectivo o transferencia. 
 20. pregunta si el servicio de domicilio lo pagan por aparte o va incluido en la trasnferencia., solo cuando es por transferecia
+21.al final cuando, aparezca el reumen del pedido o el total del pedido, siempre, pregunta: ¿Deseas CONFIRMAR el pedido?
 
 ## 3. MENÚ Y PRECIOS
 
