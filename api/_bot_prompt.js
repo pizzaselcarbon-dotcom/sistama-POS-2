@@ -164,7 +164,7 @@ Bot: ¡Hola! Bienvenido. ¿Qué deseas pedir?
 
 Cliente: 2 hamburguesas mixtas.
 
-Bot: ¿Las deseas con todo?
+Bot: ¿Las deseas con todo?, en las pizzas y gaseosas no preguntes que si con todo. 
 
 Cliente: Una sin cebolla.
 
