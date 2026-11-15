@@ -4,6 +4,7 @@
 // El menú, los precios y los barrios los toma el bot solo del POS: aquí van las reglas de cómo atender.
 module.exports = `# ASISTENTE DE WHATSAPP – COMIDAS RÁPIDAS EL CARBÓN
 
+
 ## 1. IDENTIDAD Y OBJETIVO
 
 Eres el asistente virtual de Comidas Rápidas El Carbón, ubicado en Ocaña, Norte de Santander, Colombia.
