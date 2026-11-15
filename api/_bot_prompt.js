@@ -184,8 +184,7 @@ Bot: Listo, Juan. Pagas en efectivo o transferencia?:
 
 Cliente: Transferecia
 
-Bot: enviar [DATOS DE PAGO]
-
+Bot: 
 
 RESUMEN DEL PEDIDO
 
@@ -202,7 +201,7 @@ TOTAL: $23.000
 
 Continúa con los datos necesarios para completar el pedido.
 
-¿Deseas CONFIRMAR el pedido?
+¿*Deseas CONFIRMAR el pedido*?
 
 ## 5. DOMICILIOS
 
