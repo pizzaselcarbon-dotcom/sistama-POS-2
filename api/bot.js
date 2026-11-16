@@ -47,7 +47,7 @@ function catalogText(cfg, items) {
   }).join('\n');
 }
 
-function systemPrompt(cfg, items, phone, base) {
+function systemPrompt(cfg, items, phone, base, pname) {
   const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Bogota' }));
   const dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
   const zones = (cfg.zones || []).filter(z => z.n);
@@ -56,7 +56,9 @@ function systemPrompt(cfg, items, phone, base) {
 # DATOS EN VIVO DEL SISTEMA (tienen prioridad sobre lo anterior si hay diferencias)
 Hoy es ${dias[now.getDay()]}, hora ${now.getHours()}:${String(now.getMinutes()).padStart(2, '0')} (Colombia).
 ${cfg.open === false ? 'El negocio está CERRADO para pedidos ahora mismo: avisa amablemente y no tomes pedidos.' : ''}
-Teléfono del cliente: ${phone || 'NO CONOCIDO (pídelo si es domicilio o recoger)'}.
+Teléfono del cliente: ${phone ? phone + ' (es el número desde el que escribe: YA lo tienes, NO se lo pidas)' : 'NO CONOCIDO (pídelo una sola vez si es domicilio o recoger)'}.
+Nombre del perfil de WhatsApp: ${pname || 'no disponible'}.
+DATOS PERSONALES: pide el nombre (y el teléfono, solo si no lo tienes) UNA sola vez y con amabilidad. Si el cliente no quiere darlos, no responde a eso o ya lo pediste antes, NO insistas más: deja "nombre" y/o "telefono" vacíos ("") en el order y sigue con el pedido; el sistema usará solo el nombre del perfil y el número desde el que escribe. Nunca inventes un nombre ni escribas "no quiere dar". Para domicilio la dirección y el barrio sí son indispensables.
 
 ## Catálogo oficial (usa SOLO estos id y precios al registrar el pedido)
 ${catalogText(cfg, items)}
@@ -125,6 +127,8 @@ function parseModel(raw) {
 }
 
 // Convierte la orden del modelo en un pedido válido para el POS. Nunca se pierde un pedido: lo dudoso queda marcado para revisar.
+// el cliente no quiso dar su nombre: se usa el del perfil de WhatsApp
+const goodName = n => { const v = clean(n, 80); return v && !/^(no\b|sin\b|n\/?a$|ning[uú]n|prefiero|cliente$|an[oó]nimo|desconocido)/i.test(v) ? v : ''; };
 function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   const zones = (cfg.zones || []).filter(z => z.n);
   const dom = norm(o.tipo).startsWith('dom') || (add && add.tipo === 'domicilio');
@@ -164,7 +168,7 @@ function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   const note = [add ? '➕ ADICIÓN al pedido anterior (mismo cliente, sin cobrar domicilio otra vez)' : '', '💬 WhatsApp', clean(add ? '' : o.nota, 200), !dom && !add ? 'Pago: ' + pagoBase : '', flags.length ? '⚠ REVISAR: ' + flags.join('; ') : ''].filter(Boolean).join(' | ').slice(0, 300);
   return {
     type: dom ? 'domicilio' : 'mesa', table: (add ? (dom ? '' : PICK) : (dom ? zone : PICK)).slice(0, 40),
-    name: clean((o.nombre || sender) + (add ? ' (adición)' : ''), 80), phone: phone.slice(0, 30), address: dom ? clean(o.direccion, 200) : '',
+    name: clean((goodName(o.nombre) || sender) + (add ? ' (adición)' : ''), 80), phone: phone.slice(0, 30), address: dom ? clean(o.direccion, 200) : '',
     note, pay: payTxt.slice(0, 40), fee, lines, total: sub + fee, status: 'new', source: 'whatsapp',
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
@@ -184,6 +188,7 @@ function applyTotals(text, calc) {
     t = t.replace(/\{\{\s*SUBTOTAL\s*\}\}/gi, money(calc.total - calc.fee)).replace(/\{\{\s*DOMICILIO\s*\}\}/gi, money(calc.fee)).replace(/\{\{\s*TOTAL\s*\}\}/gi, money(calc.total));
     // respaldo: si el modelo escribió el total a mano, se corrige con el valor real
     t = t.replace(/(^|[^a-záéíóúñ])(total\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total));
+    t = t.replace(/(^|[^a-záéíóúñ])(subtotal\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total - calc.fee));
   }
   return t.replace(/\{\{[^}]*\}\}/g, '').replace(/[ \t]+\n/g, '\n');
 }
@@ -205,7 +210,7 @@ function buildChange(o, base, sender) {
   const txt = clean(o.nota || (Array.isArray(o.lineas) && o.lineas[0] && o.lineas[0].nota) || 'cambio solicitado', 150);
   const dom = base.tipo === 'domicilio';
   return {
-    type: dom ? 'domicilio' : 'mesa', table: dom ? '' : PICK, name: clean((base.name || sender) + ' (cambio)', 80), phone: clean(base.phone, 30), address: dom ? clean(base.address, 200) : '',
+    type: dom ? 'domicilio' : 'mesa', table: dom ? '' : PICK, name: clean((goodName(base.name) || sender) + ' (cambio)', 80), phone: clean(base.phone, 30), address: dom ? clean(base.address, 200) : '',
     note: '✏️ CAMBIO AL PEDIDO ANTERIOR | 💬 WhatsApp', pay: '', fee: 0,
     lines: [{ id: 'cambio', name: '⚠ CAMBIO: ' + txt, qty: 1, price: 0, mods: [], cat: '' }],
     total: 0, status: 'new', source: 'whatsapp', createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -262,6 +267,8 @@ module.exports = async (req, res) => {
     const digits = sender.replace(/\D/g, '');
     const phoneKnown = digits.length >= 10 && digits.length === sender.replace(/[\s+\-()]/g, '').length ? digits.slice(-10) : '';
     const key = crypto.createHash('sha1').update(sender).digest('hex').slice(0, 24);
+    const sNum = sender.replace(/[\s+\-()]/g, ''), pname = clean(q.name || q.senderName || q.pushname || '', 60) || (/^\d+$/.test(sNum) || /^lid:/i.test(sender) ? '' : sender);
+    const dispName = pname || sender; // nombre que se usa si el cliente no da el suyo
     const ref = db.collection('bot_chats').doc(key);
     const snap = await ref.get();
     // El cliente ya hizo el pedido en la página y además lo manda por WhatsApp ("*Nuevo pedido a domicilio* #AB12"):
@@ -320,12 +327,13 @@ module.exports = async (req, res) => {
     // Fuera de horario (o cerrado a mano): responder CERRADO sin gastar IA, salvo que el cliente ya tenga un pedido abierto
     if ((cfg.open === false || !inHours(cfg)) && !(base && base.open)) return res.status(200).json({ replies: [{ message: closedText(cfg), delay: 1 }] });
 
-    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base) },
+    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     let { reply, order, carrito } = parseModel(raw);
     let out = reply || 'Un momento, por favor.';
     // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
-    out = applyTotals(out, calcCart(order && order.lineas ? order : carrito, cfg, items));
+    const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
+    out = applyTotals(out, calcCart(cartNow, cfg, items));
     let orderId = null;
 
     let info = null, addInfo = null;
@@ -344,12 +352,12 @@ module.exports = async (req, res) => {
       }
       let doc = null;
       if (kind === 'skip') doc = null;
-      else if (kind === 'cambio' && base && base.open) { doc = buildChange(order, base, sender); doc.addTo = prev.lastOrder; doc.kind = 'cambio'; }
-      else if (kind === 'adicion' && base && base.open) { doc = buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, direccion: base.address, pago: base.pago, telefono: base.phone }), cfg, items, base.phone || phoneKnown, sender, base); doc.addTo = prev.lastOrder; doc.kind = 'adicion'; if (warn) doc.note += ' | ⚠ REVISAR: confirmar que sean solo productos nuevos'; }
+      else if (kind === 'cambio' && base && base.open) { doc = buildChange(order, base, dispName); doc.addTo = prev.lastOrder; doc.kind = 'cambio'; }
+      else if (kind === 'adicion' && base && base.open) { doc = buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, direccion: base.address, pago: base.pago, telefono: base.phone }), cfg, items, base.phone || phoneKnown, dispName, base); doc.addTo = prev.lastOrder; doc.kind = 'adicion'; if (warn) doc.note += ' | ⚠ REVISAR: confirmar que sean solo productos nuevos'; }
       else if ((kind === 'adicion' || kind === 'cambio') && base) { // el pedido anterior ya no se puede tocar: se registra como pedido nuevo con los mismos datos
-        doc = kind === 'cambio' ? null : buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, telefono: base.phone, direccion: base.address, barrio: base.zone, pago: base.pago }), cfg, items, base.phone || phoneKnown, sender);
+        doc = kind === 'cambio' ? null : buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, telefono: base.phone, direccion: base.address, barrio: base.zone, pago: base.pago }), cfg, items, base.phone || phoneKnown, dispName);
         if (!doc) out = 'Ese pedido ya salió o está listo, por eso no puedo cambiarlo. Una persona del equipo te ayuda enseguida.';
-      } else doc = buildOrder(order, cfg, items, phoneKnown, sender);
+      } else doc = buildOrder(order, cfg, items, phoneKnown, dispName);
       if (doc) {
         if (!doc.lines.length) out = 'Disculpa, no pude registrar el pedido. Una persona del equipo te ayuda enseguida.';
         else {
@@ -365,7 +373,7 @@ module.exports = async (req, res) => {
       }
     }
     const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
-    const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0 };
+    const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0, cart: (!orderId && cartNow && !/adic/i.test(String(cartNow.tipo || ''))) ? cartNow : null };
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
