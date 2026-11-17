@@ -273,7 +273,13 @@ module.exports = async (req, res) => {
     const snap = await ref.get();
     // El cliente ya hizo el pedido en la página y además lo manda por WhatsApp ("*Nuevo pedido a domicilio* #AB12"):
     // no se crea otro pedido; se busca el que ya está en cocina y se le confirma.
+    // Contactos ignorados y chats que atiende una persona (se configuran desde el POS → WhatsApp)
+    let wcfg = {};
+    try { const w = await db.collection('pos_wacfg').doc('main').get(); wcfg = w.exists ? w.data() : {}; } catch (e) { console.error('wacfg', e && e.message); }
+    const tail = digits.slice(-10), hit = arr => Array.isArray(arr) && arr.some(x => { x = String(x); return x === key || (x.length >= 10 && /^\d+$/.test(x) && x.slice(-10) === (phoneKnown || tail)); });
+    if (hit(wcfg.ignore)) return res.status(200).json({ replies: [] });
     await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'u', t: text }], '');
+    if (hit(wcfg.manual)) return res.status(200).json({ replies: [] });
     const mp = text.match(/Nuevo pedido\s+(a domicilio|para recoger)[^#]{0,5}\*?\s*#\s*([A-Za-z0-9]{4})\b/i);
     if (mp) {
       const code = mp[2].toUpperCase(), isDom = /domicilio/i.test(mp[1]);
