@@ -13,6 +13,7 @@ module.exports = async (req, res) => {
   if (!same(req.headers['x-secret'] || q.k || '', secret)) return res.status(401).json({ error: 'clave' });
 
   let b = req.body, title = '', text = '', app = '', at = 0;
+  if (Buffer.isBuffer(b)) b = b.toString('utf8'); // si llega con un tipo de contenido raro
   if (typeof b === 'string') { try { const j = JSON.parse(b); b = j && typeof j === 'object' ? j : null; } catch (e) { text = b; b = null; } }
   if (b && typeof b === 'object') {
     title = b.title || ''; text = b.text || b.message || b.body || b.notification || ''; app = b.app || ''; at = +b.at || 0;
