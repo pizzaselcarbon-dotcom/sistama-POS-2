@@ -70,12 +70,11 @@ Si el barrio no está en esta lista, di que una persona del equipo confirma cobe
 ## Medios de pago del sistema
 ${(cfg.pays || []).join(', ') || 'Efectivo, Transferencia'}
 ${cfg.trInfo ? 'Datos para transferir:\n' + cfg.trInfo : ''}
-## Pago por transferencia en DOMICILIO (obligatorio)
-Si el pedido es a DOMICILIO y el cliente dice que paga por transferencia (Nequi, Bre-B, Daviplata), pregunta UNA sola vez: «¿El domicilio lo incluyes en la transferencia o lo pagas en efectivo al recibir?».
-- Si el domicilio va incluido en la transferencia: "pago_domicilio":"incluido". Dile que transfiera {{TOTAL}}.
-- Si paga el domicilio en efectivo al recibir: "pago_domicilio":"recibir". Dile que transfiera {{SUBTOTAL}} y que el domicilio ({{DOMICILIO}}) lo paga en efectivo al domiciliario.
-- Si el cliente ya lo dijo, no lo preguntes de nuevo. No lo preguntes si paga en efectivo ni si es para recoger.
-- Al darle los datos de transferencia, indícale siempre el valor exacto que debe transferir.
+## Pago por transferencia (obligatorio; ANULA cualquier instrucción anterior que lo contradiga)
+- NUNCA preguntes si el domicilio va incluido en la transferencia o se paga en efectivo al recibir. No existe esa pregunta.
+- NUNCA des el valor a transferir, ni los datos de pago (Nequi, Bre-B, cuentas), ni pidas comprobante ANTES de que el cliente confirme el pedido. Cuando el cliente diga que paga por transferencia, solo anota "pago":"Transferencia" y sigue con el flujo normal: completa los datos que falten y muestra el RESUMEN con {{TOTAL}} pidiendo confirmación.
+- Los datos para transferir y el valor exacto los envía el sistema automáticamente en el mensaje de confirmación. Tú, al confirmar, responde solo "Pedido confirmado.".
+- "pago_domicilio": usa "incluido" siempre, salvo que el cliente diga por su cuenta que el domicilio lo paga en efectivo al recibir (entonces "recibir"). No lo preguntes.
 
 ${base ? `# PEDIDO ANTERIOR DE ESTE CLIENTE (ya confirmado en esta conversación)
 Cliente: ${base.name}${base.tipo === 'domicilio' ? ' (domicilio)' : ' (recoger)'}.
@@ -160,10 +159,9 @@ function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   const digits = String(o.telefono || '').replace(/\D/g, '');
   const phone = digits.length >= 7 ? digits.slice(-10) : (phoneKnown || '');
   if (!phone) flags.push('sin teléfono');
-  if (dom && !add && /transfer|nequi|bre|davi/i.test(clean(o.pago, 30)) && !o.pago_domicilio) flags.push('no se indicó si el domicilio va incluido en la transferencia o se paga al recibir');
   const pagoBase = clean(o.pago, 30) || ((cfg.pays || [])[0] || '');
   const tr = /transfer|nequi|bre|davi/i.test(pagoBase);
-  const payTxt = dom ? (tr && o.pago_domicilio ? pagoBase + (o.pago_domicilio === 'recibir' ? ' · domicilio al recibir' : ' · domicilio incluido') : pagoBase) : '';
+  const payTxt = dom ? (tr && !add ? pagoBase + (o.pago_domicilio === 'recibir' ? ' · domicilio al recibir' : ' · domicilio incluido') : pagoBase) : '';
   const sub = lines.reduce((s, l) => s + l.price * l.qty, 0);
   const note = [add ? '➕ ADICIÓN al pedido anterior (mismo cliente, sin cobrar domicilio otra vez)' : '', '💬 WhatsApp', clean(add ? '' : o.nota, 200), !dom && !add ? 'Pago: ' + pagoBase : '', flags.length ? '⚠ REVISAR: ' + flags.join('; ') : ''].filter(Boolean).join(' | ').slice(0, 300);
   return {
@@ -188,6 +186,7 @@ function applyTotals(text, calc) {
     t = t.replace(/\{\{\s*SUBTOTAL\s*\}\}/gi, money(calc.total - calc.fee)).replace(/\{\{\s*DOMICILIO\s*\}\}/gi, money(calc.fee)).replace(/\{\{\s*TOTAL\s*\}\}/gi, money(calc.total));
     // respaldo: si el modelo escribió el total a mano, se corrige con el valor real
     t = t.replace(/(^|[^a-záéíóúñ])(total\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total));
+    t = t.replace(/(transfier\w*|transferir\w*|consign\w*)([^\n$\d]{0,40}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total));
     t = t.replace(/(^|[^a-záéíóúñ])(subtotal\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total - calc.fee));
   }
   return t.replace(/\{\{[^}]*\}\}/g, '').replace(/[ \t]+\n/g, '\n');
@@ -377,6 +376,11 @@ module.exports = async (req, res) => {
           } catch (e) {}
         }
       }
+    }
+    if (orderId && info && /transfer|nequi|bre|davi/i.test(String(order.pago || ''))) { // al confirmar: el sistema da el valor exacto y los datos de pago
+      const rec = String(order.pago_domicilio || '') === 'recibir' && info.tipo === 'domicilio';
+      const tot = (calcCart(order, cfg, items) || {}).total, fee = (calcCart(order, cfg, items) || {}).fee || 0;
+      if (tot) out = 'Pedido confirmado. ✅\n\n💳 Para dejarlo listo, transfiere *' + money(rec ? tot - fee : tot) + '*' + (rec ? ' (el domicilio de ' + money(fee) + ' lo pagas en efectivo al recibir)' : '') + '.' + (cfg.trInfo ? '\n\n' + cfg.trInfo : '') + '\n\nEnvíanos el comprobante por aquí para verificar el pago.';
     }
     const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
     const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0, cart: (!orderId && cartNow && !/adic/i.test(String(cartNow.tipo || ''))) ? cartNow : null };
