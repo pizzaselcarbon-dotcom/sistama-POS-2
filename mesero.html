@@ -119,7 +119,7 @@ async function tkRemove(i,q){const x=TK.find(y=>y.id===tkCur),l=tkLine(i);if(!x|
   tkBusy=false;render()}
 window.tkMinus=i=>tkRemove(i,1);
 function tkList(){if(!TK.length)return'';
-  return `<div class="lbl" style="margin:14px 16px 0">Pedidos para llevar (${TK.length})</div><div style="padding:0 16px">${TK.map(x=>{const st=TKST[tkStat(x)]||TKST.new,t=new Date(x.at).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
+  return `<div class="lbl" style="margin:14px 16px 0">Pedidos para recoger (${TK.length})</div><div style="padding:0 16px">${TK.map(x=>{const st=TKST[tkStat(x)]||TKST.new,t=new Date(x.at).toLocaleTimeString('es-CO',{hour:'numeric',minute:'2-digit'});
     return `<div class="mesa${tkStat(x)==='ready'?' rdy':''}" style="margin-top:8px;min-height:0;gap:6px;cursor:default"><div style="display:flex;justify-content:space-between;gap:8px"><b style="font-size:17px">🥡 ${esc(x.name)}</b><span class="sub">${t}</span></div>${x.phone?`<span class="sub">📞 ${esc(x.phone)}</span>`:''}<span style="font-size:13px;font-weight:700;color:${st[1]}">${st[0]}</span>
     <div style="font-size:14px">${(x.lines||[]).map(l=>`<div>${l.qty} × ${esc(l.name)}${(l.mods&&l.mods.length)?` <span class="sub">(${l.mods.map(esc).join(', ')})</span>`:''}</div>`).join('')}</div>
     ${x.note?`<span class="sub">📝 ${esc(x.note)}</span>`:''}<div style="display:flex;justify-content:space-between;align-items:center"><b>${fmt(x.total||0)}</b><span style="display:flex;gap:6px">${tkStat(x)==='cancelled'?'':`<button class="mch" style="margin:0" onclick="openTk('${x.id}')">✏️ Modificar</button>`}<button class="mch" style="margin:0" onclick="tkDone('${x.id}')">✔ ${tkStat(x)==='cancelled'?'Quitar':'Entregado'}</button></span></div></div>`}).join('')}</div>`}
@@ -282,10 +282,10 @@ function pickSheet(){
   <button class="big" onclick="pickOk()">${p.acct?'Guardar cambio':(p.ed!=null?'Guardar cambios':'Agregar')} ${fmt(price)}</button>${p.acct?'<button class="big" style="margin-top:8px;background:#c0392b" onclick="acctDel()">🗑 Quitar '+(p.acct.q>1?p.acct.q+' unidades':'este producto')+'</button>':''}</div></div>`;
 }
 function cartSheet(){
-  return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>${tkAdd?'Agregar al pedido de 🥡 '+esc(tkAdd.name):'Pedido · '+(table===TG?'🥡 Para llevar':esc(table))}</h3>
+  return `<div class="ov" onclick="if(event.target===this)closeCart()"><div class="sh"><button class="x" onclick="closeCart()" aria-label="Cerrar">✕</button><h3>${tkAdd?'Agregar al pedido de 🥡 '+esc(tkAdd.name):'Pedido · '+(table===TG?'🥡 Para recoger':esc(table))}</h3>
   ${cart.map((l,i)=>`<div class="ln"><div class="t" style="cursor:pointer" onclick="editLine(${i})" role="button" tabindex="0"><b>${esc(l.name)}</b>${l.mods.length?`<em>${l.mods.map(esc).join(' · ')}</em>`:''}<span class="sec">${fmt(l.price*l.qty)} · ✎ Toca para modificar</span></div><div class="qty"><button onclick="chQty(${i},-1)" aria-label="Quitar uno">−</button><b>${l.qty}</b><button onclick="chQty(${i},1)" aria-label="Agregar uno">+</button></div></div>`).join('')}
   ${table===TG&&!tkAdd?`<div class="lbl">Nombre del cliente</div><input class="f" maxlength="60" placeholder="Nombre de quien recoge" value="${esc(cname)}" oninput="setCn(this.value)"><div class="lbl">Teléfono (opcional)</div><input class="f" type="tel" inputmode="tel" maxlength="20" placeholder="Ej: 3001234567" value="${esc(cphone)}" oninput="setCp(this.value)">`:''}
-  <div class="lbl">Notas para cocina</div><textarea class="f" rows="2" maxlength="300" placeholder="Ej: todo para llevar, alergia a..." oninput="fld(this.value)">${esc(note)}</textarea>
+  <div class="lbl">Notas para cocina</div><textarea class="f" rows="2" maxlength="300" placeholder="Ej: sin cebolla, alergia a..." oninput="fld(this.value)">${esc(note)}</textarea>
   <div class="tot"><span>Total</span><span>${fmt(sub())}</span></div>
   ${err?`<div class="msg" role="alert">${esc(err)}</div>`:''}
   <button class="big" ${sending?'disabled':''} onclick="send()">${sending?'Enviando…':'🍳 Enviar a cocina'}</button></div></div>`;
@@ -305,8 +305,8 @@ function render(keep){
     <div class="lbl" style="margin:8px 16px 0">Mesas</div>
     <div class="tg">${tables.map(t=>{const s=ST[t],busy=s&&s.n>0,rd=busy&&ready[t];
       return `<button class="mesa${busy?' busy':''}${rd?' rdy':''}" onclick="openTable(${JSON.stringify(t).replace(/"/g,'&quot;')})"><b>${esc(t)}</b><span class="ch">${rd?'🔔 Listo para servir':(busy?'Ocupada':'Libre')}</span><span class="sub">${busy?s.n+' producto'+(s.n===1?'':'s')+' en cuenta · toca para ver/modificar':'Toca para tomar pedido'}</span></button>`}).join('')}</div>
-    <div class="lbl" style="margin:8px 16px 0">Para llevar</div>
-    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para llevar</b><span class="ch">➕ Nuevo pedido</span><span class="sub">Toca para tomar otro pedido para recoger</span></button></div>${tkList()}
+    <div class="lbl" style="margin:8px 16px 0">Para recoger</div>
+    <div class="tg"><button class="mesa" onclick="openTable('Para recoger')"><b>🥡 Para recoger</b><span class="ch">➕ Nuevo pedido</span><span class="sub">Toca para tomar otro pedido para recoger</span></button></div>${tkList()}
     ${!isOpen()?'<div class="msg">Los pedidos están desactivados desde el POS.</div>':''}
     `;
     return;
@@ -340,7 +340,7 @@ function render(keep){
     <div class="row"><div><span class="pr">${fmt(i.price)}</span>${q?`<span class="qt">${q} en el pedido · ✎ toca para modificar</span>`:''}</div><button class="add" ${out||!isOpen()?'disabled':''} onclick="event.stopPropagation();tapAdd(${i.id})" aria-label="Agregar ${esc(i.name)}">${out?'Agotado':'+'}</button></div></div></div>`};
   const side=`<nav class="side">${cats.map((c,k)=>{const q=items.filter(i=>i.cat===c).reduce((a,i)=>a+qtyOf(i.id),0);return `<button class="tile${c===catSel?' on':''}" onclick="openCat(${k})" aria-label="${esc(catName(c))}"><span class="ic">${catIcon(c)}</span><span class="lb${catName(c).length>10?' lg':''}">${esc(catName(c))}</span>${q?`<span class="bd">${q}</span>`:''}</button>`}).join('')}</nav>`;
   const bar=count()&&!cartOpen?`<div class="bar"><button onclick="openCart()"><span>Enviar a cocina (${count()})</span><span>${fmt(sub())}</span></button></div>`:'';
-  el.innerHTML=`<div class="topbar"><button onclick="${tkAdd?'tkBack()':'backTables()'}">← ${tkAdd?'Pedido':'Mesas'}</button><h1>${tkAdd?'🥡 '+esc(tkAdd.name):(table===TG?'🥡 Para llevar':esc(table))}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
+  el.innerHTML=`<div class="topbar"><button onclick="${tkAdd?'tkBack()':'backTables()'}">← ${tkAdd?'Pedido':'Mesas'}</button><h1>${tkAdd?'🥡 '+esc(tkAdd.name):(table===TG?'🥡 Para recoger':esc(table))}</h1>${(ST[table]&&ST[table].n>0)?'<button onclick="goAcct()" style="margin-left:auto">🧾 Cuenta</button>':''}${themeBtn()}</div><div class="lay">${side}<main class="main">${items.filter(i=>i.cat===catSel).map(row).join('')}</main></div>${bar}`+(cartOpen?cartSheet():'')+(pick?pickSheet():'');
   const s2=document.querySelector('.sh');if(s2&&st)s2.scrollTop=st;
   if(aid){const n=document.getElementById(aid);if(n&&n.focus){n.focus();try{n.setSelectionRange(n.value.length,n.value.length)}catch(e){}}}
 }
