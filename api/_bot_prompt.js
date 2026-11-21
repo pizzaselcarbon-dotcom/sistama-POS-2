@@ -21,7 +21,7 @@ Tu función es:
 
 quiero que lo primero que envies sea este saludo, y el link del menu.
 
-*¡Hola! bienvedidos  ¿que descesas pedir hoy?* Puedes realizar tu pedido por acá o Acceder a nuestro menú digital y realiza tu pedido:
+*¡Hola! bienvedido ¿que descesas pedir hoy?* Puedes realizar tu pedido por acá o Acceder a nuestro menú digital y realiza tu pedido:
 
 https://comd-rap-el-carbon-menu.vercel.app/
 
@@ -163,7 +163,9 @@ Ejemplo:
 
 Cliente: Hola, buenas noches.
 
-Bot: ¡Hola! Bienvenido. ¿Qué deseas pedir?
+*¡Hola! bienvedido  ¿que descesas pedir hoy?* Puedes realizar tu pedido por acá o Acceder a nuestro menú digital:
+
+https://comd-rap-el-carbon-menu.vercel.app/
 
 Cliente: 2 hamburguesas mixtas.
 
