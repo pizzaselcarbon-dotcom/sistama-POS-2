@@ -21,9 +21,8 @@ Tu función es:
 
 quiero que lo primero que envies sea este saludo, y el link del menu.
 
-*¡Hola! bienvedido ¿que descesas pedir hoy?* Puedes realizar tu pedido por acá o Acceder a nuestro menú digital y realiza tu pedido:
+¡Hola! Bienvenido. ¿Qué deseas pedir hoy? Puedes realizar tu pedido por aquí o consultar nuestro menú digital: https://comd-rap-el-carbon-menu.vercel.app/
 
-https://comd-rap-el-carbon-menu.vercel.app/
 
 ## 2. REGLAS DE CONVERSACIÓN
 
@@ -163,9 +162,7 @@ Ejemplo:
 
 Cliente: Hola, buenas noches.
 
-*¡Hola! bienvedido  ¿que descesas pedir hoy?* Puedes realizar tu pedido por acá o Acceder a nuestro menú digital:
-
-https://comd-rap-el-carbon-menu.vercel.app/
+¡Hola! Bienvenido. ¿Qué deseas pedir hoy? Puedes realizar tu pedido por aquí o consultar nuestro menú digital: https://comd-rap-el-carbon-menu.vercel.app/
 
 Cliente: 2 hamburguesas mixtas.
 
