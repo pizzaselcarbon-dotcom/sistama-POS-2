@@ -39,6 +39,14 @@ async function loadMenu(db) {
 }
 const groupsOf = (it, mods) => (it.mods || []).map(id => (mods || []).find(m => String(m.id) === String(id))).filter(Boolean);
 
+// La porción de papa solo se ofrece con perros calientes y hamburguesas (el modelo a veces la ofrece con todo)
+const BASE_PAPA = /hamburgues|perro|hot\s?dog/i;
+function stripPapaOffer(t) {
+  const parts = String(t).match(/[^\n]+?(?:[.!?]+(?=\s|$)|$)\s*|\n+/g) || [String(t)];
+  const keep = parts.filter(p => !(/porci[oó]n(es)?\s+(extra\s+)?de\s+papa|papas?\s+(adicional|extra)|adicion\w*\s+(de\s+)?(la\s+)?papa/i.test(p) && /¿|\?|quieres|deseas|gustar|agreg|adicion/i.test(p)));
+  const r = keep.join('').replace(/\n{3,}/g, '\n\n').trim();
+  return /[\p{L}\p{N}]/u.test(r) ? r : '¿Deseas algo más para tu pedido?';
+}
 function catalogText(cfg, items) {
   return items.map(it => {
     const off = it.stock != null && +it.stock <= 0;
@@ -59,6 +67,7 @@ ${cfg.open === false ? 'El negocio está CERRADO para pedidos ahora mismo: avisa
 Teléfono del cliente: ${phone ? phone + ' (es el número desde el que escribe: YA lo tienes, NO se lo pidas)' : 'NO CONOCIDO (pídelo una sola vez si es domicilio o recoger)'}.
 Nombre del perfil de WhatsApp: ${pname || 'no disponible'}.
 DATOS PERSONALES: pide el nombre (y el teléfono, solo si no lo tienes) UNA sola vez y con amabilidad. Si el cliente no quiere darlos, no responde a eso o ya lo pediste antes, NO insistas más: deja "nombre" y/o "telefono" vacíos ("") en el order y sigue con el pedido; el sistema usará solo el nombre del perfil y el número desde el que escribe. Nunca inventes un nombre ni escribas "no quiere dar". Para domicilio el barrio es indispensable.
+PORCIONES DE PAPA: solo ofrece «porción de papa» adicional cuando el pedido tenga PERRO CALIENTE u HAMBURGUESA. NUNCA la ofrezcas con salchipapas, pizzas, picadas ni otros productos.
 DIRECCIÓN: pídela UNA sola vez. Si el cliente responde solo con el barrio, un punto de referencia o indicaciones (ej. «cerca al parque», «por la iglesia», «casa azul»), TOMA ESO como la dirección y NO vuelvas a pedirla ni insistas: ponlo en "direccion" (si solo dio el barrio, escribe el barrio) y sigue con el pedido.
 
 ## Catálogo oficial (usa SOLO estos id y precios al registrar el pedido)
@@ -341,12 +350,18 @@ module.exports = async (req, res) => {
       return res.status(200).json({ replies: [{ message: cm, delay: 1 }] });
     }
 
-    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) },
+    // Si el bot acababa de pedir la dirección/barrio y el cliente responde algo corto, ESO es la dirección: no se vuelve a preguntar
+    const lastA = [...msgs].reverse().find(m => m.r === 'a');
+    const addrAns = !!(lastA && /direcci[oó]n|barrio|ubicaci[oó]n|d[oó]nde\s+(est[aá]s|te|queda)/i.test(lastA.t) && text.length <= 100 && !/\?/.test(text) && !ORDER_WORDS.test(text) && !STATUS_Q.test(text));
+    const addrHint = addrAns ? '\n\nATENCIÓN: acabas de pedir la dirección/barrio y el cliente respondió: «' + text.replace(/[«»]/g, '') + '». Eso ES su dirección (o su barrio). Guárdalo en "direccion" y también en "barrio" (si coincide con la lista úsalo exacto; si no está en la lista, deja ese mismo texto y el equipo confirma la tarifa). NO vuelvas a pedir la dirección ni el barrio: pasa directo al siguiente paso (medio de pago o el resumen).' : '';
+    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     let { reply, order, carrito } = parseModel(raw);
     let out = reply || 'Un momento, por favor.';
     // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
     const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
+    const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
+    if (!hasBase) out = stripPapaOffer(out);
     out = applyTotals(out, calcCart(cartNow, cfg, items));
     let orderId = null;
 
