@@ -58,7 +58,8 @@ Hoy es ${dias[now.getDay()]}, hora ${now.getHours()}:${String(now.getMinutes()).
 ${cfg.open === false ? 'El negocio está CERRADO para pedidos ahora mismo: avisa amablemente y no tomes pedidos.' : ''}
 Teléfono del cliente: ${phone ? phone + ' (es el número desde el que escribe: YA lo tienes, NO se lo pidas)' : 'NO CONOCIDO (pídelo una sola vez si es domicilio o recoger)'}.
 Nombre del perfil de WhatsApp: ${pname || 'no disponible'}.
-DATOS PERSONALES: pide el nombre (y el teléfono, solo si no lo tienes) UNA sola vez y con amabilidad. Si el cliente no quiere darlos, no responde a eso o ya lo pediste antes, NO insistas más: deja "nombre" y/o "telefono" vacíos ("") en el order y sigue con el pedido; el sistema usará solo el nombre del perfil y el número desde el que escribe. Nunca inventes un nombre ni escribas "no quiere dar". Para domicilio la dirección y el barrio sí son indispensables.
+DATOS PERSONALES: pide el nombre (y el teléfono, solo si no lo tienes) UNA sola vez y con amabilidad. Si el cliente no quiere darlos, no responde a eso o ya lo pediste antes, NO insistas más: deja "nombre" y/o "telefono" vacíos ("") en el order y sigue con el pedido; el sistema usará solo el nombre del perfil y el número desde el que escribe. Nunca inventes un nombre ni escribas "no quiere dar". Para domicilio el barrio es indispensable.
+DIRECCIÓN: pídela UNA sola vez. Si el cliente responde solo con el barrio, un punto de referencia o indicaciones (ej. «cerca al parque», «por la iglesia», «casa azul»), TOMA ESO como la dirección y NO vuelvas a pedirla ni insistas: ponlo en "direccion" (si solo dio el barrio, escribe el barrio) y sigue con el pedido.
 
 ## Catálogo oficial (usa SOLO estos id y precios al registrar el pedido)
 ${catalogText(cfg, items)}
@@ -154,6 +155,7 @@ function buildOrder(o, cfg, items, phoneKnown, sender, add) {
   if (dom && !add) {
     const z = zones.find(x => norm(x.n) === norm(o.barrio)) || zones.find(x => norm(o.barrio) && norm(x.n).includes(norm(o.barrio)));
     if (z) { zone = z.n; fee = +z.p || 0; } else flags.push('barrio sin tarifa: ' + clean(o.barrio, 40));
+    if (!clean(o.direccion, 200)) o.direccion = clean((z ? z.n : o.barrio) || '', 120) ? clean((z ? z.n : o.barrio), 120) + ' (sin dirección exacta)' : ''; // si solo dio el barrio, ese es el dato
     if (!clean(o.direccion, 200)) flags.push('sin dirección');
   }
   const digits = String(o.telefono || '').replace(/\D/g, '');
@@ -330,7 +332,14 @@ module.exports = async (req, res) => {
     }
 
     // Fuera de horario (o cerrado a mano): responder CERRADO sin gastar IA, salvo que el cliente ya tenga un pedido abierto
-    if ((cfg.open === false || !inHours(cfg)) && !(base && base.open)) return res.status(200).json({ replies: [{ message: closedText(cfg), delay: 1 }] });
+    if ((cfg.open === false || !inHours(cfg)) && !(base && base.open)) {
+      // El aviso de cerrado se envía UNA sola vez: si el cliente sigue escribiendo («listo», «gracias»…) no se repite en 8 horas
+      if (prev.closedAt && Date.now() - prev.closedAt < 8 * 3600e3) return res.status(200).json({ replies: [] });
+      const cm = closedText(cfg);
+      try { await ref.set({ closedAt: Date.now() }, { merge: true }); } catch (e) { console.error('closedAt', e && e.message); }
+      await mirrorChat(db, key, sender, phoneKnown, q, [{ r: 'a', t: cm }], '');
+      return res.status(200).json({ replies: [{ message: cm, delay: 1 }] });
+    }
 
     const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
