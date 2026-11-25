@@ -434,6 +434,12 @@ module.exports = async (req, res) => {
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     let { reply, order, carrito } = parseModel(raw);
     let out = reply || 'Un momento, por favor.';
+    // Red de seguridad: si el bot dice que agregó/cambió algo pero olvidó enviar el "order", se crea con el carrito conocido
+    if (!order && base && /list[oa][,.!]*\s*(ya\s+)?(lo\s+)?agreg[uú][eé]|agreg[uú][eé]\s+a\s+tu\s+pedido|avisamos\s+a\s+cocina/i.test(out)) {
+      const cz = (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart && prev.cart.lineas && prev.cart.lineas.length ? prev.cart : null));
+      if (/avisamos\s+a\s+cocina/i.test(out)) order = { tipo: 'cambio', nota: clean(text, 150), lineas: [] };
+      else if (cz) order = { tipo: 'adicion', nota: '', lineas: cz.lineas };
+    }
     // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
     const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
     const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
@@ -494,7 +500,7 @@ module.exports = async (req, res) => {
       else { parts = [GREETING, out]; out = GREETING + '\n\n' + out; }
     }
     const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
-    const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0, cart: (!orderId && cartNow && !/adic/i.test(String(cartNow.tipo || ''))) ? cartNow : null };
+    const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0, cart: (!orderId && cartNow) ? cartNow : null };
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
