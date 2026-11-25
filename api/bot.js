@@ -108,6 +108,7 @@ Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
 {"reply": "mensaje para el cliente", "carrito": null, "order": null}
 - "reply" sigue todas las reglas de conversación y estilo anteriores (breve, una pregunta por mensaje).
 - VARIEDADES (obligatorio): si el cliente pide un producto genérico que en el catálogo tiene varias opciones (hamburguesa, perro caliente, pizza, salchipapa, picada, choripollo, sándwich, gaseosa, etc.), NO elijas tú ni asumas la más barata ni la primera. Pregúntale de cuál quiere, nombrando las opciones disponibles con su precio (usa SOLO los nombres y precios del catálogo; ej.: "¿Cuáles hamburguesas deseas? Tenemos: <opción 1> $X, <opción 2> $Y…"). Si pide varias unidades (ej. 3 hamburguesas), pregunta cuántas de cada tipo. Solo agrega al carrito cuando el cliente haya dicho cuál. Si el producto tiene una sola opción, no preguntes. No agregues al carrito productos de los que aún no definió la variedad.
+- CARRITO LIMPIO: en cada respuesta reconstruye "carrito" desde cero con lo que el cliente pidió en esta conversación (sin repetir líneas ya contadas ni duplicar cantidades). Si el cliente cambia de domicilio a recoger (o al revés), solo cambia "tipo"; los productos no se duplican. No escribas totales parciales en mensajes intermedios (no digas «tu pedido queda en $…» antes del resumen): pregunta lo siguiente que falte.
 - RESUMEN: cuando ya tengas todo (productos, tipo, datos, pago) y vayas a pedir la confirmación, escribe EXACTAMENTE esta estructura (el sistema arma la lista con precios y los botones de respuesta): una línea con {{RESUMEN}}, luego las líneas de 📍 Dirección (o 🛍️ Recoge en el local), 👤 Nombre y 💳 Pago. NO escribas la lista de productos, ni el total, ni la pregunta "¿confirmas?"; el sistema agrega "Responde SÍ para confirmar / CAMBIAR para modificar". Si el cliente responde CAMBIAR, pregúntale qué desea modificar y vuelve a mostrar el {{RESUMEN}}. Si responde SÍ (o similar), confirma el pedido normalmente.
 - TOTALES: NUNCA calcules ni escribas cantidades de dinero de totales. Donde necesites decir el subtotal, el domicilio o el total, escribe exactamente {{SUBTOTAL}}, {{DOMICILIO}} o {{TOTAL}} y el sistema pondrá el valor correcto. Solo puedes escribir precios unitarios que estén en el catálogo.
 - CARRITO: en CADA respuesta incluye además "carrito" con TODO lo que el cliente lleva pedido hasta ahora en el pedido nuevo: {"tipo":"domicilio"|"recoger"|"","barrio":"(exacto de la lista, si ya lo sabes)","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["..."]}]}. Si todavía no ha pedido nada, "carrito" es null. Si es una adición a un pedido anterior, "carrito" lleva SOLO los productos nuevos y "tipo":"adicion".
@@ -206,28 +207,52 @@ function summaryBlock(calc) {
   L.push('*Total — ' + money(calc.total) + '*');
   return L.join('\n');
 }
+// Respaldo sin cálculo: si el modelo escribe el resumen en una sola línea, se parte en líneas ordenadas
+function tidyFlat(text) {
+  let t = String(text);
+  if (!/responde\s+\*?s[ií](?![\p{L}])|tu\s+pedido\s+queda\s+as[ií]|resumen\s+del\s+pedido/iu.test(t) || t.split('\n').length > 3) return t;
+  t = t.replace(/(tu\s+pedido\s+queda\s+as[ií]\s*:?)\s*/i, '*Tu pedido*\n')
+    .replace(/(?:\s+y\s+|,\s*|\.\s+)(?=\d+\s*[x×]\s)/g, '\n')
+    .replace(/\s*([\u{1F4CD}\u{1F464}\u{1F4B3}\u{1F6CD}\u{1F4DE}]\uFE0F?)/gu, '\n$1')
+    .replace(/[.\s]*[\u2705\u270F]\uFE0F?\s*(Responde)/giu, '\n$1')
+    .replace(/[.\s]*(Responde\s+\*?s[ií](?![\p{L}]))/iu, '\n\n✅ $1')
+    .replace(/[.\s]*(Responde\s+\*?cambiar\b)/i, '\n✏️ $1')
+    .replace(/(\p{L}|\d)\.(?=\n)/gu, '$1');
+  t = t.replace(/\n{3,}/g, '\n\n').trim().replace(/\.$/, '');
+  return /cambiar/i.test(t) ? t : t + '\n✏️ Responde CAMBIAR para modificar';
+}
 function ensureSummary(text, calc) {
   let t = String(text);
-  if (!calc || !(calc.total > 0)) return t;
+  if (!calc || !(calc.total > 0)) return tidyFlat(t);
   if (/\{\{\s*RESUMEN\s*\}\}/i.test(t)) {
     t = t.replace(/\{\{\s*RESUMEN\s*\}\}/gi, () => summaryBlock(calc));
     return /responde\s+\*?s[ií]/i.test(t) ? t : t.replace(/\n+$/, '') + '\n\n' + SUMMARY_FOOT;
   }
-  const hdr = /resumen\s+(del|de\s+tu)\s+pedido|^[*_\s]*tu\s+pedido\s*:?[*_\s]*$/im.test(t);
-  const ask = /confirm|¿[^?\n]*(est[aá]\s+(todo\s+)?(bien|correcto)|correcto|todo\s+bien|procedo|lo\s+(enviamos|mando|env[ií]o))[^?\n]*\?/i.test(t);
-  if (/pedido confirmado/i.test(t) || !(hdr || (ask && /\{\{\s*TOTAL|total/i.test(t)))) return t;
-  // solo se conservan las líneas de datos (dirección, nombre, pago…); la lista y el total los pone el servidor
-  const keep = t.split('\n').map(l => l.trim()).filter(l => l && /^(📍|👤|💳|🛍|📞|🕒)|^[*_\s]*(direcci[oó]n|barrio|nombre|cliente|pago|m[eé]todo|tel[eé]fono|recoge|recoger)\b/i.test(l)).map(l => l.replace(/\*/g, '').replace(/^(\p{Extended_Pictographic}\uFE0F?\s*)?/u, m => m));
-  return summaryBlock(calc) + (keep.length ? '\n' + keep.join('\n') : '') + '\n\n' + SUMMARY_FOOT;
+  const hdr = /resumen\s+(del|de\s+tu)\s+pedido|^[*_\s]*tu\s+pedido(\s+queda\s+as[ií])?\s*:?[*_\s]*(\n|$)|tu\s+pedido\s+queda\s+as[ií]\s*:/im.test(t);
+  const ask = /confirm|responde\s+\*?s[ií](?![\p{L}])|¿[^?\n]*(est[aá]\s+(todo\s+)?(bien|correcto)|correcto|todo\s+bien|procedo|lo\s+(enviamos|mando|env[ií]o))[^?\n]*\?/iu.test(t);
+  if (/pedido confirmado/i.test(t) || !(hdr || ask)) return t;
+  // datos del cliente: se extraen aunque el modelo los escriba todos en una línea
+  const T = t.replace(/\*/g, '');
+  const grab = (re) => { const m = T.match(re); return m ? m[1].replace(/[\s.,;]+$/, '').trim() : ''; };
+  const STOP = '(?=\\s*(?:Direcci[oó]n|Barrio|Nombre|Cliente|Tel[eé]fono|Pago|M[eé]todo|Recoge|Responde|[\\u{1F4CD}\\u{1F464}\\u{1F4B3}\\u{1F6CD}\\u2705\\u270F]|\\n|$))';
+  const f = (lab) => grab(new RegExp('(?:' + lab + ')\\s*:\\s*(.+?)' + STOP, 'isu'));
+  const dir = f('Direcci[oó]n|Barrio'), nom = f('Nombre|Cliente'), tel = f('Tel[eé]fono'), pago = f('Pago|M[eé]todo de pago');
+  const K = [];
+  if (calc.dom) { if (dir) K.push('📍 Dirección: ' + dir); } else K.push('🛍️ Recoge en el local');
+  if (nom) K.push('👤 Nombre: ' + nom);
+  if (tel) K.push('📞 Teléfono: ' + tel);
+  if (pago) K.push('💳 Pago: ' + pago);
+  return summaryBlock(calc) + (K.length ? '\n' + K.join('\n') : '') + '\n\n' + SUMMARY_FOOT;
 }
 function applyTotals(text, calc) {
   let t = String(text);
   if (calc) {
     t = t.replace(/\{\{\s*SUBTOTAL\s*\}\}/gi, money(calc.total - calc.fee)).replace(/\{\{\s*DOMICILIO\s*\}\}/gi, money(calc.fee)).replace(/\{\{\s*TOTAL\s*\}\}/gi, money(calc.total));
     // respaldo: si el modelo escribió el total a mano, se corrige con el valor real
-    t = t.replace(/(^|[^a-záéíóúñ])(total\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total));
-    t = t.replace(/(transfier\w*|transferir\w*|consign\w*)([^\n$\d]{0,40}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total));
-    t = t.replace(/(^|[^a-záéíóúñ])(subtotal\b[^\n$\d]{0,30}?)\$\s?[\d.,]+/gi, (m, a, b) => a + b + money(calc.total - calc.fee));
+    t = t.replace(/(^|[^a-záéíóúñ])(total\b[^\n$\d]{0,30}?)\$\s?\d(?:[\d.,]*\d)?/gi, (m, a, b) => a + b + money(calc.total));
+    t = t.replace(/(\b(?:queda|quedar[ií]a|sale|salen|ser[ií]a|ser[ií]an)\s+(?:en|por)|\bpedido\s+(?:es\s+de|son|ser[ií]a))(\s*)\$\s?\d(?:[\d.,]*\d)?/gi, (m, a, b) => a + b + money(calc.total));
+    t = t.replace(/(transfier\w*|transferir\w*|consign\w*)([^\n$\d]{0,40}?)\$\s?\d(?:[\d.,]*\d)?/gi, (m, a, b) => a + b + money(calc.total));
+    t = t.replace(/(^|[^a-záéíóúñ])(subtotal\b[^\n$\d]{0,30}?)\$\s?\d(?:[\d.,]*\d)?/gi, (m, a, b) => a + b + money(calc.total - calc.fee));
   }
   return t.replace(/\{\{[^}]*\}\}/g, '').replace(/[ \t]+\n/g, '\n');
 }
@@ -391,6 +416,7 @@ module.exports = async (req, res) => {
     const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
     const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
     if (!hasBase) out = stripPapaOffer(out);
+    if (!order) out = out.replace(/(^|\n)\s*(listo[.,!]*\s*)?tu pedido\s+(queda|es|son|ser[ií]a)\s+(en|de|por)?\s*\$\s?\d(?:[\d.,]*\d)?[.,]?\s*(?=¿)/i, '$1$2');
     out = out.replace(/[,;]?\s*(y\s+)?en\s+(las\s+)?(pizzas?|gaseosas?|bebidas?)[^.\n?]*no\s+pregunt\w*[^.\n]*\.?/gi, '').replace(/[,;]?\s*no\s+pregunt(es|ar)\s+(que\s+)?si[^.\n]*\.?/gi, '').replace(/\?,\s*$/gm, '?');
     const calcNow = calcCart(cartNow, cfg, items);
     if (!order && !(base && base.open)) out = ensureSummary(out, calcNow);
