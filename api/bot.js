@@ -195,6 +195,9 @@ function calcCart(c, cfg, items) {
   if (!d.lines.length || d.lines.some(l => String(l.id).startsWith('x'))) return null;
   return { total: d.total, fee: d.fee, lines: d.lines, dom, zone: dom ? clean(d.table, 60) : '' };
 }
+// Saludo fijo: es lo primero que envía el bot en una conversación nueva
+const GREETING = '¡Hola! Bienvenido. ¿Qué deseas pedir hoy? Puedes realizar tu pedido por aquí o consultar nuestro menú digital: https://comd-rap-el-carbon-menu.vercel.app/';
+const GREET_ONLY = /^[¡!\s]*(hola+|ola|holi|hey|buenas|buenos dias|buen dia|buenas tardes|buenas noches|buenas tardes noches|saludos|que tal|hello|hi)( (veci|vecino|vecina|amigo|amiga|a todos|como estas|como esta|como estan))?[\s!.,?]*$/;
 // Resumen del pedido con formato fijo (lo arma el servidor con los precios reales; el modelo no lo escribe)
 const SUMMARY_FOOT = '✅ Responde *SÍ* para confirmar\n✏️ Responde *CAMBIAR* para modificar';
 function summaryBlock(calc) {
@@ -464,13 +467,19 @@ module.exports = async (req, res) => {
       const tot = (calcCart(order, cfg, items) || {}).total, fee = (calcCart(order, cfg, items) || {}).fee || 0;
       if (tot) out = 'Pedido confirmado. ✅\n\n💳 Para dejarlo listo, transfiere *' + money(rec ? tot - fee : tot) + '*' + (rec ? ' (el domicilio de ' + money(fee) + ' lo pagas en efectivo al recibir)' : '') + '.' + (cfg.trInfo ? '\n\n' + cfg.trInfo : '') + '\n\nEnvíanos el comprobante por aquí para verificar el pago.';
     }
+    // Primer mensaje de una conversación nueva: siempre sale primero el saludo fijo
+    let parts = [out];
+    if (!msgs.length && !orderId && !(order && cfg.open === false)) {
+      if (GREET_ONLY.test(norm(text))) { out = GREETING; parts = [GREETING]; }
+      else { parts = [GREETING, out]; out = GREETING + '\n\n' + out; }
+    }
     const hist = msgs.concat([{ r: 'u', t: text }, { r: 'a', t: out }]).slice(-30);
     const save = { msgs: hist, at: Date.now(), lastOrder: prev.lastOrder || null, lastInfo: prev.lastInfo || null, lastAt: prev.lastAt || 0, cart: (!orderId && cartNow && !/adic/i.test(String(cartNow.tipo || ''))) ? cartNow : null };
     if (info) { save.lastOrder = orderId; save.lastInfo = info; save.lastAt = Date.now(); }
     else if (addInfo) save.lastInfo = addInfo;
     await ref.set(save);
     await mirrorChat(db, key, sender, phoneKnown || (save.lastInfo && save.lastInfo.phone) || '', q, [{ r: 'a', t: out }], save.lastOrder);
-    return res.status(200).json({ replies: [{ message: out }] });
+    return res.status(200).json({ replies: parts.map((m, i) => i ? { message: m, delay: 2 } : { message: m }) });
   } catch (e) {
     console.error('bot', e && e.message);
     return res.status(200).json({ replies: [{ message: 'Disculpa, tuve un problema. Un momento, ya te ayuda una persona del equipo.' }] });
