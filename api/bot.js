@@ -211,10 +211,12 @@ function ensureSummary(text, calc) {
     t = t.replace(/\{\{\s*RESUMEN\s*\}\}/gi, () => summaryBlock(calc));
     return /responde\s+\*?s[ií]/i.test(t) ? t : t.replace(/\n+$/, '') + '\n\n' + SUMMARY_FOOT;
   }
-  const asks = /confirm|¿[^?\n]*(est[aá]\s+(todo\s+)?(bien|correcto)|correcto|todo\s+bien|procedo|lo\s+(enviamos|mando|env[ií]o))[^?\n]*\?/i.test(t) && /\{\{\s*TOTAL|total/i.test(t) && /\?/.test(t);
-  if (!asks) return t;
-  const keep = t.split('\n').filter(l => l.trim() && !/\$|\{\{/.test(l) && !/^[*_\s]*(resumen|tu pedido|pedido)\b[^\n]{0,30}:?[*_\s]*$/i.test(l) && !(/confirm/i.test(l) && /\?/.test(l)) && !/^\s*[-•*]\s*(\d+\s*[x×]|\d+\s+\w)/i.test(l));
-  return summaryBlock(calc) + (keep.length ? '\n\n' + keep.join('\n') : '') + '\n\n' + SUMMARY_FOOT;
+  const hdr = /resumen\s+(del|de\s+tu)\s+pedido|^[*_\s]*tu\s+pedido\s*:?[*_\s]*$/im.test(t);
+  const ask = /confirm|¿[^?\n]*(est[aá]\s+(todo\s+)?(bien|correcto)|correcto|todo\s+bien|procedo|lo\s+(enviamos|mando|env[ií]o))[^?\n]*\?/i.test(t);
+  if (/pedido confirmado/i.test(t) || !(hdr || (ask && /\{\{\s*TOTAL|total/i.test(t)))) return t;
+  // solo se conservan las líneas de datos (dirección, nombre, pago…); la lista y el total los pone el servidor
+  const keep = t.split('\n').map(l => l.trim()).filter(l => l && /^(📍|👤|💳|🛍|📞|🕒)|^[*_\s]*(direcci[oó]n|barrio|nombre|cliente|pago|m[eé]todo|tel[eé]fono|recoge|recoger)\b/i.test(l)).map(l => l.replace(/\*/g, '').replace(/^(\p{Extended_Pictographic}\uFE0F?\s*)?/u, m => m));
+  return summaryBlock(calc) + (keep.length ? '\n' + keep.join('\n') : '') + '\n\n' + SUMMARY_FOOT;
 }
 function applyTotals(text, calc) {
   let t = String(text);
