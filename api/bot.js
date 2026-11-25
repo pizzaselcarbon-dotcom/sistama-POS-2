@@ -337,6 +337,11 @@ module.exports = async (req, res) => {
     const sNum = sender.replace(/[\s+\-()]/g, ''), pname = clean(q.name || q.senderName || q.pushname || '', 60) || (/^\d+$/.test(sNum) || /^lid:/i.test(sender) ? '' : sender);
     const dispName = pname || sender; // nombre que se usa si el cliente no da el suyo
     const ref = db.collection('bot_chats').doc(key);
+    // Comando de prueba: "/nuevo" borra la memoria de este chat para volver a ver el saludo de bienvenida
+    if (/^\/?nuevo chat$|^\/nuevo$|^\/reiniciar$/i.test(text.trim())) {
+      await ref.set({ msgs: [], at: 0, cart: null, closedAt: 0 });
+      return res.status(200).json({ replies: [{ message: 'Chat reiniciado ✅. Ahora escribe "Hola" para ver el saludo.' }] });
+    }
     const snap = await ref.get();
     // El cliente ya hizo el pedido en la página y además lo manda por WhatsApp ("*Nuevo pedido a domicilio* #AB12"):
     // no se crea otro pedido; se busca el que ya está en cocina y se le confirma.
