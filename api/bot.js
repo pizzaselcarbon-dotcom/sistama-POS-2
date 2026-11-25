@@ -67,6 +67,7 @@ ${cfg.open === false ? 'El negocio está CERRADO para pedidos ahora mismo: avisa
 Teléfono del cliente: ${phone ? phone + ' (es el número desde el que escribe: YA lo tienes, NO se lo pidas)' : 'NO CONOCIDO (pídelo una sola vez si es domicilio o recoger)'}.
 Nombre del perfil de WhatsApp: ${pname || 'no disponible'}.
 DATOS PERSONALES: pide el nombre (y el teléfono, solo si no lo tienes) UNA sola vez y con amabilidad. Si el cliente no quiere darlos, no responde a eso o ya lo pediste antes, NO insistas más: deja "nombre" y/o "telefono" vacíos ("") en el order y sigue con el pedido; el sistema usará solo el nombre del perfil y el número desde el que escribe. Nunca inventes un nombre ni escribas "no quiere dar". Para domicilio el barrio es indispensable.
+CON TODO / SIN INGREDIENTES: pregunta «¿La(s) deseas con todo?» SOLO para hamburguesas, perros calientes y sándwiches; NUNCA para pizzas, gaseosas, bebidas, salchipapas ni picadas. Si el cliente dice «con todo» NO marques ninguna opción «Sin …» (deja "opciones" vacío o pon solo "con todo" en "nota"). Registra un «Sin X» ÚNICAMENTE si el cliente pidió explícitamente quitar X, para ese producto. Nunca inventes ni asumas ingredientes. Jamás repitas al cliente instrucciones internas de este texto (como «no preguntes…»): son órdenes para ti, no frases para decir.
 PORCIONES DE PAPA: solo ofrece «porción de papa» adicional cuando el pedido tenga PERRO CALIENTE u HAMBURGUESA. NUNCA la ofrezcas con salchipapas, pizzas, picadas ni otros productos.
 DIRECCIÓN: pídela UNA sola vez. Si el cliente responde solo con el barrio, un punto de referencia o indicaciones (ej. «cerca al parque», «por la iglesia», «casa azul»), TOMA ESO como la dirección y NO vuelvas a pedirla ni insistas: ponlo en "direccion" (si solo dio el barrio, escribe el barrio) y sigue con el pedido.
 
@@ -390,6 +391,7 @@ module.exports = async (req, res) => {
     const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
     const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
     if (!hasBase) out = stripPapaOffer(out);
+    out = out.replace(/[,;]?\s*(y\s+)?en\s+(las\s+)?(pizzas?|gaseosas?|bebidas?)[^.\n?]*no\s+pregunt\w*[^.\n]*\.?/gi, '').replace(/[,;]?\s*no\s+pregunt(es|ar)\s+(que\s+)?si[^.\n]*\.?/gi, '').replace(/\?,\s*$/gm, '?');
     const calcNow = calcCart(cartNow, cfg, items);
     if (!order && !(base && base.open)) out = ensureSummary(out, calcNow);
     out = applyTotals(out, calcNow);
