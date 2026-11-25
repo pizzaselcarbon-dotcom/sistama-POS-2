@@ -42,7 +42,7 @@ const groupsOf = (it, mods) => (it.mods || []).map(id => (mods || []).find(m => 
 // La porción de papa solo se ofrece con perros calientes y hamburguesas (el modelo a veces la ofrece con todo)
 const BASE_PAPA = /hamburgues|perro|hot\s?dog/i;
 function stripPapaOffer(t) {
-  const parts = String(t).match(/[^\n]+?(?:[.!?]+(?=\s|$)|$)\s*|\n+/g) || [String(t)];
+  const parts = String(t).match(/[^\n]+?(?:[.!?]+(?=\s|$)|$)\s*|\n+/gm) || [String(t)];
   const keep = parts.filter(p => !(/porci[oó]n(es)?\s+(extra\s+)?de\s+papa|papas?\s+(adicional|extra)|adicion\w*\s+(de\s+)?(la\s+)?papa/i.test(p) && /¿|\?|quieres|deseas|gustar|agreg|adicion/i.test(p)));
   const r = keep.join('').replace(/\n{3,}/g, '\n\n').trim();
   return /[\p{L}\p{N}]/u.test(r) ? r : '¿Deseas algo más para tu pedido?';
@@ -106,6 +106,7 @@ Si el teléfono del cliente figura como NO CONOCIDO, debes pedírselo (para domi
 Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
 {"reply": "mensaje para el cliente", "carrito": null, "order": null}
 - "reply" sigue todas las reglas de conversación y estilo anteriores (breve, una pregunta por mensaje).
+- RESUMEN: cuando ya tengas todo (productos, tipo, datos, pago) y vayas a pedir la confirmación, escribe EXACTAMENTE esta estructura (el sistema arma la lista con precios y los botones de respuesta): una línea con {{RESUMEN}}, luego las líneas de 📍 Dirección (o 🛍️ Recoge en el local), 👤 Nombre y 💳 Pago. NO escribas la lista de productos, ni el total, ni la pregunta "¿confirmas?"; el sistema agrega "Responde SÍ para confirmar / CAMBIAR para modificar". Si el cliente responde CAMBIAR, pregúntale qué desea modificar y vuelve a mostrar el {{RESUMEN}}. Si responde SÍ (o similar), confirma el pedido normalmente.
 - TOTALES: NUNCA calcules ni escribas cantidades de dinero de totales. Donde necesites decir el subtotal, el domicilio o el total, escribe exactamente {{SUBTOTAL}}, {{DOMICILIO}} o {{TOTAL}} y el sistema pondrá el valor correcto. Solo puedes escribir precios unitarios que estén en el catálogo.
 - CARRITO: en CADA respuesta incluye además "carrito" con TODO lo que el cliente lleva pedido hasta ahora en el pedido nuevo: {"tipo":"domicilio"|"recoger"|"","barrio":"(exacto de la lista, si ya lo sabes)","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["..."]}]}. Si todavía no ha pedido nada, "carrito" es null. Si es una adición a un pedido anterior, "carrito" lleva SOLO los productos nuevos y "tipo":"adicion".
 - "order" es null en todos los mensajes, EXCEPTO en el mensaje en que el cliente CONFIRMA el resumen final (dice sí, confirmo, dale, etc.). En ese mensaje "reply" debe ser solo "Pedido confirmado." y "order" lleva:
@@ -131,7 +132,7 @@ async function openai(messages) {
 }
 
 function parseModel(raw) {
-  try { const j = JSON.parse(raw); return { reply: clean(j.reply, 1500), order: j.order && typeof j.order === 'object' ? j.order : null, carrito: j.carrito && typeof j.carrito === 'object' ? j.carrito : null }; }
+  try { const j = JSON.parse(raw); return { reply: String(j.reply == null ? '' : j.reply).replace(/[\u0000-\u0009\u000b-\u001f]/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, 1500), order: j.order && typeof j.order === 'object' ? j.order : null, carrito: j.carrito && typeof j.carrito === 'object' ? j.carrito : null }; }
   catch (e) { return { reply: clean(String(raw).replace(/[{}"]/g, ''), 600), order: null }; }
 }
 
@@ -189,7 +190,31 @@ function calcCart(c, cfg, items) {
   const dom = norm(c.tipo).startsWith('dom');
   const d = buildOrder({ tipo: dom ? 'domicilio' : 'recoger', barrio: c.barrio, direccion: 'x', telefono: '0000000', lineas: c.lineas }, cfg, items, '0000000', 'x');
   if (!d.lines.length || d.lines.some(l => String(l.id).startsWith('x'))) return null;
-  return { total: d.total, fee: d.fee };
+  return { total: d.total, fee: d.fee, lines: d.lines, dom, zone: dom ? clean(d.table, 60) : '' };
+}
+// Resumen del pedido con formato fijo (lo arma el servidor con los precios reales; el modelo no lo escribe)
+const SUMMARY_FOOT = '✅ Responde *SÍ* para confirmar\n✏️ Responde *CAMBIAR* para modificar';
+function summaryBlock(calc) {
+  const L = ['*Tu pedido*'];
+  (calc.lines || []).forEach(l => {
+    L.push(l.qty + ' × ' + l.name + ' — ' + money((+l.price || 0) * l.qty));
+    (l.mods || []).forEach(m => L.push('   └ ' + m));
+  });
+  if (calc.dom && calc.fee > 0) L.push('Domicilio' + (calc.zone ? ' (' + calc.zone + ')' : '') + ' — ' + money(calc.fee));
+  L.push('*Total — ' + money(calc.total) + '*');
+  return L.join('\n');
+}
+function ensureSummary(text, calc) {
+  let t = String(text);
+  if (!calc || !(calc.total > 0)) return t;
+  if (/\{\{\s*RESUMEN\s*\}\}/i.test(t)) {
+    t = t.replace(/\{\{\s*RESUMEN\s*\}\}/gi, () => summaryBlock(calc));
+    return /responde\s+\*?s[ií]/i.test(t) ? t : t.replace(/\n+$/, '') + '\n\n' + SUMMARY_FOOT;
+  }
+  const asks = /confirm|¿[^?\n]*(est[aá]\s+(todo\s+)?(bien|correcto)|correcto|todo\s+bien|procedo|lo\s+(enviamos|mando|env[ií]o))[^?\n]*\?/i.test(t) && /\{\{\s*TOTAL|total/i.test(t) && /\?/.test(t);
+  if (!asks) return t;
+  const keep = t.split('\n').filter(l => l.trim() && !/\$|\{\{/.test(l) && !/^[*_\s]*(resumen|tu pedido|pedido)\b[^\n]{0,30}:?[*_\s]*$/i.test(l) && !(/confirm/i.test(l) && /\?/.test(l)) && !/^\s*[-•*]\s*(\d+\s*[x×]|\d+\s+\w)/i.test(l));
+  return summaryBlock(calc) + (keep.length ? '\n\n' + keep.join('\n') : '') + '\n\n' + SUMMARY_FOOT;
 }
 function applyTotals(text, calc) {
   let t = String(text);
@@ -362,7 +387,9 @@ module.exports = async (req, res) => {
     const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
     const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
     if (!hasBase) out = stripPapaOffer(out);
-    out = applyTotals(out, calcCart(cartNow, cfg, items));
+    const calcNow = calcCart(cartNow, cfg, items);
+    if (!order && !(base && base.open)) out = ensureSummary(out, calcNow);
+    out = applyTotals(out, calcNow);
     let orderId = null;
 
     let info = null, addInfo = null;
