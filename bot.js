@@ -196,6 +196,25 @@ function calcCart(c, cfg, items) {
   if (!d.lines.length || d.lines.some(l => String(l.id).startsWith('x'))) return null;
   return { total: d.total, fee: d.fee, lines: d.lines, dom, zone: dom ? clean(d.table, 60) : '' };
 }
+// El cliente a veces nombra un producto por su precio ("el hit es el de 6000"): se busca en el catálogo
+function priceRefs(text, items) {
+  const t = String(text || '').toLowerCase(), nums = new Set();
+  (t.match(/\d{1,3}(?:[.,]\d{3})+|\d{4,6}/g) || []).forEach(x => nums.add(parseInt(x.replace(/[.,]/g, ''), 10)));
+  (t.match(/\b(\d{1,2})\s*(?:mil|k)\b/g) || []).forEach(x => nums.add(parseInt(x, 10) * 1000));
+  return (items || []).filter(i => nums.has(Math.round(+i.price || 0)));
+}
+const famOf = it => norm((it.cat || '') + '|' + String(it.name || '').split(/\s+/)[0]);
+// si el cliente dio el precio de otra variedad de un producto que ya lleva en el carrito (mismo tipo), se cambia en el carrito
+function applyPriceRef(cart, text, items) {
+  if (!cart || !Array.isArray(cart.lineas) || !cart.lineas.length) return { cart, changed: [] };
+  const cands = priceRefs(text, items), changed = []; let lineas = cart.lineas.map(l => Object.assign({}, l));
+  cands.forEach(c => {
+    if (lineas.some(l => String(l.id) === String(c.id))) return;
+    const k = lineas.findIndex(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && String(it.id) !== String(c.id) && famOf(it) === famOf(c); });
+    if (k >= 0) { changed.push(c.name); lineas[k].id = c.id; }
+  });
+  return { cart: changed.length ? Object.assign({}, cart, { lineas }) : cart, changed };
+}
 // Saludo fijo: es lo primero que envía el bot en una conversación nueva
 const GREETING = '¡Hola! Bienvenido. ¿Qué deseas pedir hoy? Puedes realizar tu pedido por aquí o consultar nuestro menú digital: https://comd-rap-el-carbon-menu.vercel.app/';
 const GREET_ONLY = /^[¡!\s]*(hola+|ola|holi|hey|buenas|buenos dias|buen dia|buenas tardes|buenas noches|buenas tardes noches|saludos|que tal|hello|hi)( (veci|vecino|vecina|amigo|amiga|a todos|como estas|como esta|como estan))?[\s!.,?]*$/;
@@ -431,7 +450,8 @@ module.exports = async (req, res) => {
     const lastA = [...msgs].reverse().find(m => m.r === 'a');
     const addrAns = !!(lastA && /direcci[oó]n|barrio|ubicaci[oó]n|d[oó]nde\s+(est[aá]s|te|queda)/i.test(lastA.t) && text.length <= 100 && !/\?/.test(text) && !ORDER_WORDS.test(text) && !STATUS_Q.test(text));
     const addrHint = addrAns ? '\n\nATENCIÓN: acabas de pedir la dirección/barrio y el cliente respondió: «' + text.replace(/[«»]/g, '') + '». Eso ES su dirección (o su barrio). Guárdalo en "direccion" y también en "barrio" (si coincide con la lista úsalo exacto; si no está en la lista, deja ese mismo texto y el equipo confirma la tarifa). NO vuelvas a pedir la dirección ni el barrio: pasa directo al siguiente paso (medio de pago o el resumen).' : '';
-    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint },
+    const pc = priceRefs(text, items), pcHint = pc.length ? '\n\nATENCIÓN: el cliente mencionó el valor ' + pc.map(i => money(i.price)).filter((v, k, a) => a.indexOf(v) === k).join(' / ') + ', que en el catálogo corresponde a: ' + pc.map(i => '[' + i.id + '] ' + i.name).join(', ') + '. Si está hablando de un producto que ya pidió (por ejemplo «el hit es el de 6000»), REEMPLAZA ese producto por la variedad de ese precio en el carrito (no lo dejes como estaba ni lo dupliques) y confirma el cambio.' : '';
+    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint + pcHint },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     let { reply, order, carrito } = parseModel(raw);
     if (base && base.open && !order && /no\s+se\s+puede\s+(modificar|cambiar|agregar)|ya\s+no\s+(se\s+puede|puedo)|(hacer|haz|hagas)\s+un\s+(nuevo|otro)\s+pedido|nuevo\s+pedido/i.test(reply || '')) {
@@ -450,7 +470,8 @@ module.exports = async (req, res) => {
       else if (cz) order = { tipo: 'adicion', nota: '', lineas: cz.lineas };
     }
     // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
-    const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
+    let cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
+    if (!order && cartNow) { const ar = applyPriceRef(cartNow, text, items); cartNow = ar.cart; }
     const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
     if (!hasBase) out = stripPapaOffer(out);
     if (!order) out = out.replace(/(^|\n)\s*(listo[.,!]*\s*)?tu pedido\s+(queda|es|son|ser[ií]a)\s+(en|de|por)?\s*\$\s?\d(?:[\d.,]*\d)?[.,]?\s*(?=¿)/i, '$1$2');
