@@ -95,7 +95,7 @@ Estado real en el sistema (dato en vivo): ${{ new: 'RECIBIDO, la cocina aún no 
 La conversación sigue abierta. Reglas para mensajes posteriores:
 - Si el cliente pregunta por su pedido ("¿ya viene?", "¿cuánto falta?", "se demora", "¿qué pasó con mi pedido?"): responde con el estado real de arriba, en una o dos frases amables, sin inventar tiempos exactos. Si está RECIBIDO o EN COCINA, dile que ya lo estamos preparando y agradece la paciencia (usa los tiempos de demora del prompt solo si ya los conoces). Si está LISTO y es domicilio, dile que ya va en camino; si es para recoger, que puede pasar por él. Si está CANCELADO, avisa y ofrécele ayuda. Si lleva mucho más tiempo del normal, discúlpate y dile que se lo avisas a una persona del equipo. No envíes "order" en estos casos.
 - Si el cliente quiere AGREGAR algo y el pedido está en preparación: toma solo lo nuevo (con la misma regla de no repetir lo ya pedido), ofrécele lo que falte (bebida, adicionales) solo si es útil, y al final muestra un resumen corto SOLO de lo agregado y pide confirmación. Cuando confirme, responde «Listo, lo agregué a tu pedido.» y envía "order" con "tipo":"adicion" y solo las líneas nuevas (no pidas nombre, teléfono, dirección ni pago otra vez: ya los tienes).
-- Si quiere CAMBIAR o QUITAR algo del pedido anterior y está en preparación: confirma el cambio con una frase corta y envía "order" con "tipo":"cambio" y en "nota" la descripción exacta del cambio (con el nombre del producto afectado). Responde «Listo, avisamos a cocina del cambio.»
+- Si quiere CAMBIAR o QUITAR algo del pedido anterior y está en preparación: en ESE MISMO mensaje confirma con una frase corta («Listo, avisamos a cocina del cambio.») y envía "order" con "tipo":"cambio". NUNCA digas solo «voy a cambiarlo» sin enviar el "order". Campos del cambio: "quitar":[{"id":<id del producto del PEDIDO ANTERIOR que se quita o reemplaza>,"qty":1}] y "lineas":[los productos NUEVOS que lo reemplazan, con su id del catálogo; vacío si solo se quita algo] y "nota": descripción corta (ej.: «Cambiar HIT 250ml por HIT 1L»). Ejemplo: tenía HIT 250ml y quiere el de 1 L → quitar:[{"id":<id HIT 250ml>,"qty":1}], lineas:[{"id":<id HIT 1L>,"qty":1}]. Si el cambio es solo una indicación («sin cebolla en una hamburguesa») usa solo "nota" y deja quitar y lineas vacíos. No repitas en "lineas" productos que no cambian.
 - Si el pedido ya no se puede modificar: explica amablemente que ya salió o está listo y ofrécele hacer un pedido nuevo (se pide todo como un pedido nuevo, con "tipo":"domicilio" o "recoger", incluyendo solo lo del pedido nuevo).
 - Si el cliente quiere un pedido totalmente distinto, tómalo como pedido nuevo.
 - MUY IMPORTANTE: en "order" con "tipo":"adicion" incluye ÚNICAMENTE los productos nuevos. NUNCA repitas los productos del pedido anterior ni cambies su id. Al resumir una adición, muestra solo lo agregado y su valor, no el total de todo el pedido.
@@ -273,14 +273,28 @@ function mergeLines(a, b) {
   return Object.values(m);
 }
 
-function buildChange(o, base, sender) {
-  const txt = clean(o.nota || (Array.isArray(o.lineas) && o.lineas[0] && o.lineas[0].nota) || 'cambio solicitado', 150);
-  const dom = base.tipo === 'domicilio';
+function applyRemove(bl, quitar) {
+  const rm = {}; (quitar || []).forEach(r => { rm[r.id] = (rm[r.id] || 0) + r.qty; });
+  return (bl || []).map(l => { const n = Math.min(rm[l.id] || 0, l.qty); rm[l.id] = (rm[l.id] || 0) - n; return Object.assign({}, l, { qty: l.qty - n }); }).filter(l => l.qty > 0);
+}
+function buildChange(o, base, sender, cfg, items) {
+  const dom = base.tipo === 'domicilio', bl = base.lines || [];
+  // lo que se quita: solo productos que de verdad están en el pedido anterior
+  const quitar = (Array.isArray(o.quitar) ? o.quitar : []).map(r => ({ id: String(r && r.id), qty: Math.max(1, Math.min(99, Math.floor(+(r && r.qty)) || 1)) })).filter(r => bl.some(l => String(l.id) === r.id));
+  const lin = Array.isArray(o.lineas) ? o.lineas.filter(l => l && !bl.some(b => String(b.id) === String(l.id) && !quitar.some(r => r.id === String(l.id)))) : [];
+  let nuevas = [];
+  if (lin.length && items) { const d = buildOrder({ tipo: 'recoger', telefono: base.phone || '0000000', nombre: 'x', lineas: lin }, cfg, items, base.phone || '0000000', 'x'); nuevas = d.lines.filter(l => !String(l.id).startsWith('x')); }
+  const nameOf = id => ((bl.find(l => String(l.id) === id) || {}).name) || id;
+  const rmTxt = quitar.map(r => r.qty + ' ' + nameOf(r.id));
+  const addTxt = nuevas.map(l => l.qty + ' ' + l.name);
+  const auto = rmTxt.length || addTxt.length ? [rmTxt.length ? 'QUITAR ' + rmTxt.join(', ') : '', addTxt.length ? 'AGREGAR ' + addTxt.join(', ') : ''].filter(Boolean).join(' → ') : '';
+  const txt = clean(auto || o.nota || (Array.isArray(o.lineas) && o.lineas[0] && o.lineas[0].nota) || 'cambio solicitado', 150);
+  const restado = quitar.reduce((a, r) => { const it = (items || []).find(i => String(i.id) === r.id); return a + (it ? (+it.price || 0) * r.qty : 0); }, 0);
   return {
     type: dom ? 'domicilio' : 'mesa', table: dom ? '' : PICK, name: clean((goodName(base.name) || sender) + ' (cambio)', 80), phone: clean(base.phone, 30), address: dom ? clean(base.address, 200) : '',
     note: '✏️ CAMBIO AL PEDIDO ANTERIOR | 💬 WhatsApp', pay: '', fee: 0,
-    lines: [{ id: 'cambio', name: '⚠ CAMBIO: ' + txt, qty: 1, price: 0, mods: [], cat: '' }],
-    total: 0, status: 'new', source: 'whatsapp', createdAt: admin.firestore.FieldValue.serverTimestamp()
+    lines: [{ id: 'cambio', name: '⚠ CAMBIO: ' + txt, qty: 1, price: 0, mods: [], cat: '' }].concat(nuevas),
+    remove: quitar, total: Math.max(0, nuevas.reduce((a, l) => a + l.price * l.qty, 0) - restado), status: 'new', source: 'whatsapp', createdAt: admin.firestore.FieldValue.serverTimestamp()
   };
 }
 
@@ -447,7 +461,7 @@ module.exports = async (req, res) => {
       }
       let doc = null;
       if (kind === 'skip') doc = null;
-      else if (kind === 'cambio' && base && base.open) { doc = buildChange(order, base, dispName); doc.addTo = prev.lastOrder; doc.kind = 'cambio'; }
+      else if (kind === 'cambio' && base && base.open) { doc = buildChange(order, base, dispName, cfg, items); doc.addTo = prev.lastOrder; doc.kind = 'cambio'; }
       else if (kind === 'adicion' && base && base.open) { doc = buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, direccion: base.address, pago: base.pago, telefono: base.phone }), cfg, items, base.phone || phoneKnown, dispName, base); doc.addTo = prev.lastOrder; doc.kind = 'adicion'; if (warn) doc.note += ' | ⚠ REVISAR: confirmar que sean solo productos nuevos'; }
       else if ((kind === 'adicion' || kind === 'cambio') && base) { // el pedido anterior ya no se puede tocar: se registra como pedido nuevo con los mismos datos
         doc = kind === 'cambio' ? null : buildOrder(Object.assign({}, order, { tipo: base.tipo, nombre: base.name, telefono: base.phone, direccion: base.address, barrio: base.zone, pago: base.pago }), cfg, items, base.phone || phoneKnown, dispName);
@@ -459,7 +473,8 @@ module.exports = async (req, res) => {
           const r = await db.collection('orders').add(doc);
           orderId = r.id;
           const real = doc.lines.filter(l => !String(l.id).startsWith('x') && l.id !== 'cambio').map(l => ({ id: l.id, name: l.name, qty: l.qty }));
-          if (doc.addTo && doc.kind === 'adicion') addInfo = Object.assign({}, prev.lastInfo, { lines: mergeLines(bl, real) });
+          if (doc.addTo && doc.kind === 'cambio') addInfo = Object.assign({}, prev.lastInfo, { lines: mergeLines(applyRemove(bl, doc.remove), real) });
+          else if (doc.addTo && doc.kind === 'adicion') addInfo = Object.assign({}, prev.lastInfo, { lines: mergeLines(bl, real) });
           else if (doc.kind !== 'cambio') info = { tipo: doc.type === 'domicilio' ? 'domicilio' : 'recoger', name: doc.name, phone: doc.phone, address: doc.address, zone: doc.table === PICK ? '' : doc.table, pago: clean(order.pago, 30), lines: real };
           try { // aviso push a los equipos (igual que el menú web)
             await fetch('https://' + req.headers.host + '/api/notify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: orderId }), signal: AbortSignal.timeout(4000) });
