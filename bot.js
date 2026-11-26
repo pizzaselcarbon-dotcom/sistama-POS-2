@@ -462,6 +462,18 @@ module.exports = async (req, res) => {
         const p2 = parseModel(raw2); if (p2.reply) { reply = p2.reply; order = p2.order; carrito = p2.carrito; }
       } catch (e) {}
     }
+    // Si el modelo solo dice "estoy registrando tu pedido" sin mostrar el resumen, se le pide el resumen ya (el cliente no debe tener que escribir "ok")
+    if (!order && !(base && base.open) && !/\?/.test(reply || '') && /registr|un\s+momento|un\s+instante|procesand|enseguida|perfecto|ya\s+(lo|te|casi)|estoy\s+(anotando|armando|preparando)|anotad/i.test(reply || '') && !/resumen|responde\s+\*?s[ií]|total/i.test(reply || '')) {
+      const cz = (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart && prev.cart.lineas && prev.cart.lineas.length ? prev.cart : null));
+      if (cz) {
+        try {
+          const raw3 = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint + pcHint },
+            ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text },
+            { role: 'system', content: 'CORRECCIÓN: ya tienes los datos del pedido. NO digas «estoy registrando tu pedido» ni «un momento». En ESTE mismo mensaje escribe {{RESUMEN}} y debajo solo las líneas de datos (📍 Dirección o 🛍️ Recoge en el local, 👤 Nombre, 💳 Pago) e incluye el "carrito" completo. Si te falta algún dato, pregúntalo.' }]);
+          const p3 = parseModel(raw3); if (p3.reply) { reply = p3.reply; order = p3.order; carrito = p3.carrito || carrito; }
+        } catch (e) {}
+      }
+    }
     let out = reply || 'Un momento, por favor.';
     // Red de seguridad: si el bot dice que agregó/cambió algo pero olvidó enviar el "order", se crea con el carrito conocido
     if (!order && base && /list[oa][,.!]*\s*(ya\s+)?(lo\s+)?agreg[uú][eé]|agreg[uú][eé]\s+a\s+tu\s+pedido|avisamos\s+a\s+cocina/i.test(out)) {
