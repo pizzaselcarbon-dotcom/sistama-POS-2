@@ -476,10 +476,20 @@ module.exports = async (req, res) => {
     }
     let out = reply || 'Un momento, por favor.';
     // Red de seguridad: si el bot dice que agregó/cambió algo pero olvidó enviar el "order", se crea con el carrito conocido
-    if (!order && base && /list[oa][,.!]*\s*(ya\s+)?(lo\s+)?agreg[uú][eé]|agreg[uú][eé]\s+a\s+tu\s+pedido|avisamos\s+a\s+cocina/i.test(out)) {
+    const CLAIM = /(?:list[oa]|ya|he|hemos)[,.!\s]*(?:ya\s+)?(?:lo\s+|te\s+lo\s+)?(?:he\s+)?(?:agreg|a[ñn]ad|anot)(?:u[eé]|[eé]|ado|ada|[ií])\b|(?:agreg|a[ñn]ad)(?:u[eé]|[eé]|ado)\s+(?:a|en)\s+tu\s+pedido|avisamos\s+a\s+cocina/i;
+    if (!order && base && CLAIM.test(out)) {
       const cz = (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart && prev.cart.lineas && prev.cart.lineas.length ? prev.cart : null));
       if (/avisamos\s+a\s+cocina/i.test(out)) order = { tipo: 'cambio', nota: clean(text, 150), lineas: [] };
       else if (cz) order = { tipo: 'adicion', nota: '', lineas: cz.lineas };
+      else { // no hay carrito: se le pide al modelo que envíe el order que olvidó
+        try {
+          const raw4 = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint + pcHint },
+            ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text },
+            { role: 'assistant', content: JSON.stringify({ reply: out }) },
+            { role: 'system', content: 'CORRECCIÓN: acabas de decir que agregaste algo al pedido pero NO enviaste "order". Responde de nuevo con la misma frase corta y envía ahora "order" con "tipo":"adicion" y SOLO las líneas nuevas que el cliente acaba de confirmar (id del catálogo, qty y opciones).' }]);
+          const p4 = parseModel(raw4); if (p4.order && p4.order.lineas && p4.order.lineas.length) order = p4.order;
+        } catch (e) {}
+      }
     }
     // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
     let cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
