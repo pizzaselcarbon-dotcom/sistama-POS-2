@@ -90,11 +90,12 @@ ${cfg.trInfo ? 'Datos para transferir:\n' + cfg.trInfo : ''}
 ${base ? `# PEDIDO ANTERIOR DE ESTE CLIENTE (ya confirmado en esta conversación)
 Cliente: ${base.name}${base.tipo === 'domicilio' ? ' (domicilio)' : ' (recoger)'}.
 Productos (con su id del catálogo): ${base.lines && base.lines.length ? base.lines.map(l => `[${l.id}] ${l.name} x${l.qty}`).join(', ') : base.summary}
-Estado: ${base.open ? 'EN PREPARACIÓN (todavía se puede agregar o cambiar algo)' : 'YA NO SE PUEDE MODIFICAR (está listo, ya salió o se cerró)'}.
+Estado: ${base.open ? 'EN PREPARACIÓN — SÍ SE PUEDE AGREGAR O CAMBIAR (NUNCA digas que no se puede modificar ni pidas hacer un pedido nuevo: todo lo que el cliente quiera añadir se agrega a ESTE mismo pedido)' : 'YA NO SE PUEDE MODIFICAR (está listo, ya salió o se cerró)'}.
 Estado real en el sistema (dato en vivo): ${{ new: 'RECIBIDO, la cocina aún no lo ha empezado a preparar', received: 'EN COCINA, se está preparando', ready: base.tipo === 'domicilio' ? 'LISTO, ya salió o está por salir con el domiciliario' : 'LISTO PARA RECOGER', cancelled: 'CANCELADO' }[base.st] || 'sin información'}. El pedido se registró hace ${base.mins} minutos.
 La conversación sigue abierta. Reglas para mensajes posteriores:
 - Si el cliente pregunta por su pedido ("¿ya viene?", "¿cuánto falta?", "se demora", "¿qué pasó con mi pedido?"): responde con el estado real de arriba, en una o dos frases amables, sin inventar tiempos exactos. Si está RECIBIDO o EN COCINA, dile que ya lo estamos preparando y agradece la paciencia (usa los tiempos de demora del prompt solo si ya los conoces). Si está LISTO y es domicilio, dile que ya va en camino; si es para recoger, que puede pasar por él. Si está CANCELADO, avisa y ofrécele ayuda. Si lleva mucho más tiempo del normal, discúlpate y dile que se lo avisas a una persona del equipo. No envíes "order" en estos casos.
-- Si el cliente quiere AGREGAR algo y el pedido está en preparación: toma solo lo nuevo (con la misma regla de no repetir lo ya pedido), ofrécele lo que falte (bebida, adicionales) solo si es útil, y al final muestra un resumen corto SOLO de lo agregado y pide confirmación. Cuando confirme, responde «Listo, lo agregué a tu pedido.» y envía "order" con "tipo":"adicion" y solo las líneas nuevas (no pidas nombre, teléfono, dirección ni pago otra vez: ya los tienes).
+- AGREGAR AL MISMO PEDIDO: si el cliente dice «añade», «agrega», «me puedes añadir», «también quiero…», «es para el mismo pedido» y el estado es EN PREPARACIÓN, es una ADICIÓN: NO preguntes domicilio o recoger, ni dirección, nombre, teléfono ni pago (ya los tienes), solo qué producto y variedad. Nunca digas «no se puede modificar» ni «haz un nuevo pedido» en ese estado.
+- Si el cliente quiere AGREGAR algo y el pedido está en preparación: toma solo lo nuevo (con la misma regla de no repetir lo ya pedido), ofrécele lo que falte (bebida, adicionales) solo si es útil, ADICIÓN DIRECTA: en cuanto el producto esté definido (variedad y opciones claras), NO pidas confirmación ni resumen: en ESE MISMO mensaje responde «Listo, agregué <producto> a tu pedido ✅» y envía "order" con "tipo":"adicion" y solo las líneas nuevas (no pidas nombre, teléfono, dirección ni pago otra vez: ya los tienes).
 - Si quiere CAMBIAR o QUITAR algo del pedido anterior y está en preparación: en ESE MISMO mensaje confirma con una frase corta («Listo, avisamos a cocina del cambio.») y envía "order" con "tipo":"cambio". NUNCA digas solo «voy a cambiarlo» sin enviar el "order". Campos del cambio: "quitar":[{"id":<id del producto del PEDIDO ANTERIOR que se quita o reemplaza>,"qty":1}] y "lineas":[los productos NUEVOS que lo reemplazan, con su id del catálogo; vacío si solo se quita algo] y "nota": descripción corta (ej.: «Cambiar HIT 250ml por HIT 1L»). Ejemplo: tenía HIT 250ml y quiere el de 1 L → quitar:[{"id":<id HIT 250ml>,"qty":1}], lineas:[{"id":<id HIT 1L>,"qty":1}]. Si el cambio es solo una indicación («sin cebolla en una hamburguesa») usa solo "nota" y deja quitar y lineas vacíos. No repitas en "lineas" productos que no cambian.
 - Si el pedido ya no se puede modificar: explica amablemente que ya salió o está listo y ofrécele hacer un pedido nuevo (se pide todo como un pedido nuevo, con "tipo":"domicilio" o "recoger", incluyendo solo lo del pedido nuevo).
 - Si el cliente quiere un pedido totalmente distinto, tómalo como pedido nuevo.
@@ -111,9 +112,9 @@ Responde SIEMPRE con un único objeto JSON, sin texto fuera de él:
 - CARRITO LIMPIO: en cada respuesta reconstruye "carrito" desde cero con lo que el cliente pidió en esta conversación (sin repetir líneas ya contadas ni duplicar cantidades). Si el cliente cambia de domicilio a recoger (o al revés), solo cambia "tipo"; los productos no se duplican. No escribas totales parciales en mensajes intermedios (no digas «tu pedido queda en $…» antes del resumen): pregunta lo siguiente que falte.
 - RESUMEN: cuando ya tengas todo (productos, tipo, datos, pago) y vayas a pedir la confirmación, escribe EXACTAMENTE esta estructura (el sistema arma la lista con precios y los botones de respuesta): una línea con {{RESUMEN}}, luego las líneas de 📍 Dirección (o 🛍️ Recoge en el local), 👤 Nombre y 💳 Pago. NO escribas la lista de productos, ni el total, ni la pregunta "¿confirmas?"; el sistema agrega "Responde SÍ para confirmar / CAMBIAR para modificar". Si el cliente responde CAMBIAR, pregúntale qué desea modificar y vuelve a mostrar el {{RESUMEN}}. Si responde SÍ (o similar), confirma el pedido normalmente.
 - TOTALES: NUNCA calcules ni escribas cantidades de dinero de totales. Donde necesites decir el subtotal, el domicilio o el total, escribe exactamente {{SUBTOTAL}}, {{DOMICILIO}} o {{TOTAL}} y el sistema pondrá el valor correcto. Solo puedes escribir precios unitarios que estén en el catálogo.
-- CARRITO: en CADA respuesta incluye además "carrito" con TODO lo que el cliente lleva pedido hasta ahora en el pedido nuevo: {"tipo":"domicilio"|"recoger"|"","barrio":"(exacto de la lista, si ya lo sabes)","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["..."]}]}. Si todavía no ha pedido nada, "carrito" es null. Si es una adición a un pedido anterior, "carrito" lleva SOLO los productos nuevos y "tipo":"adicion".
+- CARRITO: en CADA respuesta incluye además "carrito" con TODO lo que el cliente lleva pedido hasta ahora en el pedido nuevo: {"tipo":"domicilio"|"recoger"|"","barrio":"(exacto de la lista, si ya lo sabes)","lineas":[{"id":<id del catálogo>,"producto":"<nombre EXACTO del catálogo>","qty":1,"opciones":["..."]}]}. Si todavía no ha pedido nada, "carrito" es null. Si es una adición a un pedido anterior, "carrito" lleva SOLO los productos nuevos y "tipo":"adicion".
 - "order" es null en todos los mensajes, EXCEPTO en el mensaje en que el cliente CONFIRMA el resumen final (dice sí, confirmo, dale, etc.). En ese mensaje "reply" debe ser solo "Pedido confirmado." y "order" lleva:
-{"tipo":"domicilio"|"recoger"|"adicion"|"cambio","nombre":"","telefono":"","direccion":"","barrio":"(exacto de la lista)","pago":"(uno de los medios de pago)","pago_domicilio":"recibir"|"incluido"|"","nota":"","lineas":[{"id":<id del catálogo>,"qty":1,"opciones":["nombres de opciones del catálogo"],"nota":"cambios libres, p. ej. sin cebolla","unidades_con_cambio":<opcional>}]}
+{"tipo":"domicilio"|"recoger"|"adicion"|"cambio","nombre":"","telefono":"","direccion":"","barrio":"(exacto de la lista)","pago":"(uno de los medios de pago)","pago_domicilio":"recibir"|"incluido"|"","nota":"","lineas":[{"id":<id del catálogo>,"producto":"<nombre EXACTO del catálogo>","qty":1,"opciones":["nombres de opciones del catálogo"],"nota":"cambios libres, p. ej. sin cebolla","unidades_con_cambio":<opcional>}]}
 - Los cambios como "sin cebolla" van en "opciones" si coinciden con una opción del catálogo; si no, en la "nota" de la línea.
 - "qty" es el total de unidades de ese producto. "opciones"/"nota" son el cambio. Si el cambio aplica solo a ALGUNAS unidades, pon en "unidades_con_cambio" cuántas lo llevan (ej.: 3 perros y 1 sin cebolla → qty 3, opciones ["Sin cebolla"], unidades_con_cambio 1). Si aplica a todas, omite "unidades_con_cambio". Si cada unidad lleva un cambio distinto, usa una línea por cada cambio.
 - No incluyas "order" antes de que el cliente confirme.`;
@@ -194,6 +195,57 @@ function calcCart(c, cfg, items) {
   const d = buildOrder({ tipo: dom ? 'domicilio' : 'recoger', barrio: c.barrio, direccion: 'x', telefono: '0000000', lineas: c.lineas }, cfg, items, '0000000', 'x');
   if (!d.lines.length || d.lines.some(l => String(l.id).startsWith('x'))) return null;
   return { total: d.total, fee: d.fee, lines: d.lines, dom, zone: dom ? clean(d.table, 60) : '' };
+}
+// El cliente a veces nombra un producto por su precio ("el hit es el de 6000"): se busca en el catálogo
+function priceRefs(text, items) {
+  const t = String(text || '').toLowerCase(), nums = new Set();
+  (t.match(/\d{1,3}(?:[.,]\d{3})+|\d{4,6}/g) || []).forEach(x => nums.add(parseInt(x.replace(/[.,]/g, ''), 10)));
+  (t.match(/\b(\d{1,2})\s*(?:mil|k)\b/g) || []).forEach(x => nums.add(parseInt(x, 10) * 1000));
+  return (items || []).filter(i => nums.has(Math.round(+i.price || 0)));
+}
+const famOf = it => norm((it.cat || '') + '|' + String(it.name || '').split(/\s+/)[0]);
+// si el cliente dio el precio de otra variedad de un producto que ya lleva en el carrito (mismo tipo), se cambia en el carrito
+function applyPriceRef(cart, text, items) {
+  if (!cart || !Array.isArray(cart.lineas) || !cart.lineas.length) return { cart, changed: [] };
+  const cands = priceRefs(text, items), changed = []; let lineas = cart.lineas.map(l => Object.assign({}, l));
+  cands.forEach(c => {
+    if (lineas.some(l => String(l.id) === String(c.id))) return;
+    const k = lineas.findIndex(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && String(it.id) !== String(c.id) && famOf(it) === famOf(c); });
+    if (k >= 0) { changed.push(c.name); lineas[k].id = c.id; }
+  });
+  return { cart: changed.length ? Object.assign({}, cart, { lineas }) : cart, changed };
+}
+// El modelo a veces se equivoca de id (pide HIT 1L y anota Agua): se verifica con el nombre del producto y las opciones
+function fixIds(lineas, items, cfg, ctx) {
+  const optsOf = it => groupsOf(it, cfg.mods).flatMap(m => (m.opts || []).map(o => norm(o.n)));
+  return (lineas || []).map(l => {
+    if (!l) return l;
+    l = Object.assign({}, l);
+    const cur = items.find(i => String(i.id) === String(l.id)), pn = norm(l.producto || '');
+    if (pn.length >= 3) {
+      const byName = items.find(i => norm(i.name) === pn) || items.find(i => norm(i.name).includes(pn) || pn.includes(norm(i.name)));
+      if (byName && (!cur || norm(cur.name) !== norm(byName.name))) { l.id = byName.id; return l; }
+    }
+    const ops = (Array.isArray(l.opciones) ? l.opciones : []).map(o => norm(o)).filter(Boolean);
+    if (cur && ops.length && !ops.some(o => optsOf(cur).includes(o))) {
+      // las opciones no existen en este producto: se busca el producto que se nombró en la conversación y sí las tiene
+      const cand = items.filter(i => i.id !== cur.id && norm(i.name).length >= 3 && ctx.includes(norm(i.name)) && ops.some(o => optsOf(i).includes(o)));
+      if (cand.length === 1) l.id = cand[0].id;
+    }
+    return l;
+  });
+}
+// Último control para adiciones: el producto anotado debe haberse nombrado en la conversación reciente
+const toks = s => norm(s).replace(/(\d)\s+(ml|l|lt|k|kg|g)\b/g, '$1$2').replace(/[^a-z0-9ñ ]/g, ' ').split(' ').filter(w => w && !/^(de|del|la|el|con|sin|y|en)$/.test(w)).map(w => w.replace(/s$/, ''));
+function fixByMention(lineas, items, recent) {
+  const rs = new Set(toks(recent)), named = it => { const t = toks(it.name); return t.length > 0 && t.every(w => rs.has(w)); };
+  const cands = items.filter(named);
+  return (lineas || []).map(l => {
+    const cur = l && items.find(i => String(i.id) === String(l.id));
+    if (!cur || named(cur)) return l;
+    const alt = cands.filter(c => !(lineas || []).some(x => x && String(x.id) === String(c.id)));
+    return alt.length === 1 ? Object.assign({}, l, { id: alt[0].id }) : l;
+  });
 }
 // Saludo fijo: es lo primero que envía el bot en una conversación nueva
 const GREETING = '¡Hola! Bienvenido. ¿Qué deseas pedir hoy? Puedes realizar tu pedido por aquí o consultar nuestro menú digital: https://comd-rap-el-carbon-menu.vercel.app/';
@@ -330,12 +382,21 @@ function closedText(cfg) {
 
 module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST' });
+  const diag = req.method === 'GET' && req.query && req.query.menu;
+  if (req.method !== 'POST' && !diag) return res.status(405).json({ error: 'POST' });
   const secret = process.env.BOT_SECRET;
   if (!secret || !process.env.OPENAI_API_KEY || !process.env.FIREBASE_SERVICE_ACCOUNT) return res.status(500).json({ error: 'servidor sin configurar' });
   const given = String((req.headers && (req.headers['x-secret'] || '')) || (req.query && req.query.k) || '');
   if (given.length !== secret.length || !crypto.timingSafeEqual(Buffer.from(given), Buffer.from(secret))) return res.status(401).json({ error: 'clave' });
 
+  if (diag) { // diagnóstico: lista el menú que ve el bot y avisa si hay ids repetidos o nombres confusos
+    try {
+      const m = await loadMenu(getDb()), ids = {}, names = {};
+      m.items.forEach(i => { (ids[String(i.id)] = ids[String(i.id)] || []).push(i.name); (names[norm(i.name)] = names[norm(i.name)] || []).push(i.id); });
+      return res.status(200).json({ total: m.items.length, ids_repetidos: Object.entries(ids).filter(([, v]) => v.length > 1), nombres_repetidos: Object.entries(names).filter(([, v]) => v.length > 1),
+        productos: m.items.map(i => i.id + ' | ' + i.name + ' | ' + i.price + ' | ' + (i.cat || '') + (i.stock != null && +i.stock <= 0 ? ' | AGOTADO' : '')) });
+    } catch (e) { return res.status(500).json({ error: String(e && e.message) }); }
+  }
   const q = (req.body && req.body.query) || null;
   if (!q || typeof q.message !== 'string' || !q.sender) return res.status(400).json({ error: 'mensaje inválido' });
   if (q.isGroup === true || q.isGroup === 'true') return res.status(200).json({ replies: [] });
@@ -430,22 +491,61 @@ module.exports = async (req, res) => {
     const lastA = [...msgs].reverse().find(m => m.r === 'a');
     const addrAns = !!(lastA && /direcci[oó]n|barrio|ubicaci[oó]n|d[oó]nde\s+(est[aá]s|te|queda)/i.test(lastA.t) && text.length <= 100 && !/\?/.test(text) && !ORDER_WORDS.test(text) && !STATUS_Q.test(text));
     const addrHint = addrAns ? '\n\nATENCIÓN: acabas de pedir la dirección/barrio y el cliente respondió: «' + text.replace(/[«»]/g, '') + '». Eso ES su dirección (o su barrio). Guárdalo en "direccion" y también en "barrio" (si coincide con la lista úsalo exacto; si no está en la lista, deja ese mismo texto y el equipo confirma la tarifa). NO vuelvas a pedir la dirección ni el barrio: pasa directo al siguiente paso (medio de pago o el resumen).' : '';
-    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint },
+    const pc = priceRefs(text, items), pcHint = pc.length ? '\n\nATENCIÓN: el cliente mencionó el valor ' + pc.map(i => money(i.price)).filter((v, k, a) => a.indexOf(v) === k).join(' / ') + ', que en el catálogo corresponde a: ' + pc.map(i => '[' + i.id + '] ' + i.name).join(', ') + '. Si está hablando de un producto que ya pidió (por ejemplo «el hit es el de 6000»), REEMPLAZA ese producto por la variedad de ese precio en el carrito (no lo dejes como estaba ni lo dupliques) y confirma el cambio.' : '';
+    const raw = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint + pcHint },
       ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text }]);
     let { reply, order, carrito } = parseModel(raw);
+    if (base && base.open && !order && /no\s+se\s+puede\s+(modificar|cambiar|agregar)|ya\s+no\s+(se\s+puede|puedo)|(hacer|haz|hagas)\s+un\s+(nuevo|otro)\s+pedido|nuevo\s+pedido/i.test(reply || '')) {
+      // el modelo se equivocó: el pedido SÍ se puede ampliar; se le corrige y se repite la respuesta una vez
+      try {
+        const raw2 = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint }, ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text },
+          { role: 'system', content: 'CORRECCIÓN: el pedido anterior de este cliente SÍ se puede modificar (está EN PREPARACIÓN). Lo que el cliente pide ahora se AGREGA a ese mismo pedido como adición: no digas que no se puede ni pidas un pedido nuevo, y no pidas domicilio/dirección/nombre/pago. Pregunta solo lo que falte del producto (variedad, con todo) o, si ya está claro, envía el "order" de adición de una vez, sin pedir confirmación.' }]);
+        const p2 = parseModel(raw2); if (p2.reply) { reply = p2.reply; order = p2.order; carrito = p2.carrito; }
+      } catch (e) {}
+    }
+    // Si el modelo solo dice "estoy registrando tu pedido" sin mostrar el resumen, se le pide el resumen ya (el cliente no debe tener que escribir "ok")
+    if (!order && !(base && base.open) && !/\?/.test(reply || '') && /registr|un\s+momento|un\s+instante|procesand|enseguida|perfecto|ya\s+(lo|te|casi)|estoy\s+(anotando|armando|preparando)|anotad/i.test(reply || '') && !/resumen|responde\s+\*?s[ií]|total/i.test(reply || '')) {
+      const cz = (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart && prev.cart.lineas && prev.cart.lineas.length ? prev.cart : null));
+      if (cz) {
+        try {
+          const raw3 = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint + pcHint },
+            ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text },
+            { role: 'system', content: 'CORRECCIÓN: ya tienes los datos del pedido. NO digas «estoy registrando tu pedido» ni «un momento». En ESTE mismo mensaje escribe {{RESUMEN}} y debajo solo las líneas de datos (📍 Dirección o 🛍️ Recoge en el local, 👤 Nombre, 💳 Pago) e incluye el "carrito" completo. Si te falta algún dato, pregúntalo.' }]);
+          const p3 = parseModel(raw3); if (p3.reply) { reply = p3.reply; order = p3.order; carrito = p3.carrito || carrito; }
+        } catch (e) {}
+      }
+    }
     let out = reply || 'Un momento, por favor.';
     // Red de seguridad: si el bot dice que agregó/cambió algo pero olvidó enviar el "order", se crea con el carrito conocido
-    if (!order && base && /list[oa][,.!]*\s*(ya\s+)?(lo\s+)?agreg[uú][eé]|agreg[uú][eé]\s+a\s+tu\s+pedido|avisamos\s+a\s+cocina/i.test(out)) {
+    const ctxT = norm([reply, text].concat(msgs.slice(-3).map(m => m.t)).join(' '));
+    const recentT = [reply, text].concat(msgs.slice(-3).map(m => m.t)).join(' \n ');
+    const fx = L => fixIds(L, items, cfg, ctxT);
+    const fxA = L => fixByMention(fx(L), items, recentT);
+    if (order && Array.isArray(order.lineas)) order.lineas = /adic/i.test(String(order.tipo || '')) ? fxA(order.lineas) : fx(order.lineas);
+    if (carrito && Array.isArray(carrito.lineas)) carrito.lineas = fx(carrito.lineas);
+    const CLAIM = /(?:list[oa]|ya|he|hemos)[,.!\s]*(?:ya\s+)?(?:lo\s+|te\s+lo\s+)?(?:he\s+)?(?:agreg|a[ñn]ad|anot)(?:u[eé]|[eé]|ado|ada|[ií])\b|(?:agreg|a[ñn]ad)(?:u[eé]|[eé]|ado)\s+(?:a|en)\s+tu\s+pedido|avisamos\s+a\s+cocina/i;
+    if (!order && base && CLAIM.test(out)) {
       const cz = (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart && prev.cart.lineas && prev.cart.lineas.length ? prev.cart : null));
       if (/avisamos\s+a\s+cocina/i.test(out)) order = { tipo: 'cambio', nota: clean(text, 150), lineas: [] };
-      else if (cz) order = { tipo: 'adicion', nota: '', lineas: cz.lineas };
+      else if (cz) order = { tipo: 'adicion', nota: '', lineas: fxA(cz.lineas) };
+      else { // no hay carrito: se le pide al modelo que envíe el order que olvidó
+        try {
+          const raw4 = await openai([{ role: 'system', content: systemPrompt(cfg, items, phoneKnown, base, pname) + addrHint + pcHint },
+            ...msgs.map(m => ({ role: m.r === 'u' ? 'user' : 'assistant', content: m.t })), { role: 'user', content: text },
+            { role: 'assistant', content: JSON.stringify({ reply: out }) },
+            { role: 'system', content: 'CORRECCIÓN: acabas de decir que agregaste algo al pedido pero NO enviaste "order". Responde de nuevo con la misma frase corta y envía ahora "order" con "tipo":"adicion" y SOLO las líneas nuevas que el cliente acaba de confirmar (id del catálogo, qty y opciones).' }]);
+          const p4 = parseModel(raw4); if (p4.order && p4.order.lineas && p4.order.lineas.length) { order = p4.order; order.lineas = fxA(order.lineas); }
+        } catch (e) {}
+      }
     }
     // Los totales los calcula el servidor (el modelo se equivoca sumando): se usan los precios reales del catálogo
-    const cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
+    let cartNow = order && order.lineas ? order : (carrito && carrito.lineas && carrito.lineas.length ? carrito : (prev.cart || null)); // si el modelo olvida el carrito, se usa el último conocido
+    if (!order && cartNow) { const ar = applyPriceRef(cartNow, text, items); cartNow = ar.cart; }
     const hasBase = ((cartNow && cartNow.lineas) || []).some(l => { const it = items.find(i => String(i.id) === String(l.id)); return it && BASE_PAPA.test((it.cat || '') + ' ' + (it.name || '')); });
     if (!hasBase) out = stripPapaOffer(out);
     if (!order) out = out.replace(/(^|\n)\s*(listo[.,!]*\s*)?tu pedido\s+(queda|es|son|ser[ií]a)\s+(en|de|por)?\s*\$\s?\d(?:[\d.,]*\d)?[.,]?\s*(?=¿)/i, '$1$2');
     out = out.replace(/[,;]?\s*(y\s+)?en\s+(las\s+)?(pizzas?|gaseosas?|bebidas?)[^.\n?]*no\s+pregunt\w*[^.\n]*\.?/gi, '').replace(/[,;]?\s*no\s+pregunt(es|ar)\s+(que\s+)?si[^.\n]*\.?/gi, '').replace(/\?,\s*$/gm, '?');
+    if (base && order && /adicion/i.test(String(order.tipo || ''))) out = out.replace(/\s*¿[^?\n]*(resumen|confirm)[^?\n]*\?/gi, '').trim() || out;
     const calcNow = calcCart(cartNow, cfg, items);
     if (!order && !(base && base.open)) out = ensureSummary(out, calcNow);
     out = applyTotals(out, calcNow);
